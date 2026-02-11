@@ -59,3 +59,29 @@ fn test_full_treasury_flow() {
 
     assert!(expense.executed);
 }
+
+#[test]
+#[should_panic(expected = "amount must be positive")]
+fn test_propose_expense_rejects_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(TreasuryContract, ());
+    let client = TreasuryContractClient::new(&env, &contract_id);
+    let group_id: u64 = 1;
+    let user = Address::generate(&env);
+    let description = Bytes::from_slice(&env, b"Zero expense");
+    client.propose_expense(&group_id, &user, &0, &description);
+}
+
+#[test]
+#[should_panic(expected = "amount must be positive")]
+fn test_propose_expense_rejects_negative() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(TreasuryContract, ());
+    let client = TreasuryContractClient::new(&env, &contract_id);
+    let group_id: u64 = 1;
+    let user = Address::generate(&env);
+    let description = Bytes::from_slice(&env, b"Negative expense");
+    client.propose_expense(&group_id, &user, &-100, &description);
+}

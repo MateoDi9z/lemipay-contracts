@@ -22,6 +22,9 @@ pub enum DataKey {
     ApprovalsRequired(u64),
 }
 
+/// Maximum allowed expense amount. Can be reduced for deployment if desired.
+const MAX_EXPENSE_AMOUNT: i128 = i128::MAX;
+
 #[contract]
 pub struct TreasuryContract;
 
@@ -58,6 +61,13 @@ impl TreasuryContract {
         description: Bytes,
     ) -> u32 {
         proposer.require_auth();
+
+        if amount <= 0 {
+            panic!("amount must be positive");
+        }
+        if amount > MAX_EXPENSE_AMOUNT {
+            panic!("amount exceeds maximum allowed");
+        }
 
         let mut expenses: Map<u32, Expense> = env
             .storage()
@@ -159,6 +169,10 @@ impl TreasuryContract {
             panic!("Already executed");
         }
 
+        if expense.amount <= 0 {
+            panic!("Expense amount must be positive");
+        }
+
         if expense.approvals.len() < approvals_required {
             panic!("Not enough approvals");
         }
@@ -173,7 +187,9 @@ impl TreasuryContract {
             panic!("Insufficient balance");
         }
 
-        balance -= expense.amount;
+        balance = balance
+            .checked_sub(expense.amount)
+            .expect("balance underflow");
         expense.executed = true;
 
         env.storage()
