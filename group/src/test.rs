@@ -1,13 +1,12 @@
 use soroban_sdk::{Vec, testutils::Address as _, Address, Env};
 
-
 use crate::{GroupContract, GroupContractClient};
 
 #[test]
 fn test_create_group() {
     let env = Env::default();
 
-    // Generar direcciones mock (forma correcta en v25)
+    // Generate mock addresses (correct approach in v25)
     let user1 = Address::generate(&env);
     let user2 = Address::generate(&env);
 
