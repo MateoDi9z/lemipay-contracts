@@ -20,10 +20,14 @@ pub enum DataKey {
     Expenses(u64),
     /// Required number of approvals to execute a payment (per group). Must be set before execute_payment.
     ApprovalsRequired(u64),
+    /// Group admin: only this address can set_approvals_required and set_group_approvers for the group.
+    GroupAdmin(u64),
+    /// Addresses allowed to call approve_expense for this group. Set by group admin.
+    GroupApprovers(u64),
 }
 
-/// Maximum allowed expense amount. Can be reduced for deployment if desired.
-const MAX_EXPENSE_AMOUNT: i128 = i128::MAX;
+/// Maximum allowed expense amount (in smallest units). Kept finite so the cap is enforceable; reduce for deployment if desired.
+const MAX_EXPENSE_AMOUNT: i128 = 1_000_000_000_000_000_000_000; // 10^21
 
 #[contract]
 pub struct TreasuryContract;
@@ -45,7 +49,9 @@ impl TreasuryContract {
             .get(&DataKey::Balance(group_id))
             .unwrap_or(0);
 
-        balance += amount;
+        balance = balance
+            .checked_add(amount)
+            .expect("balance overflow");
 
         env.storage()
             .persistent()
@@ -93,7 +99,7 @@ impl TreasuryContract {
         expense_id
     }
 
-    /// Approve an expense
+    /// Approve an expense. Only addresses in the group's approvers list may approve.
     pub fn approve_expense(
         env: Env,
         group_id: u64,
@@ -101,6 +107,15 @@ impl TreasuryContract {
         approver: Address,
     ) {
         approver.require_auth();
+
+        let approvers: Vec<Address> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::GroupApprovers(group_id))
+            .expect("Group approvers not set for group");
+        if !approvers.contains(&approver) {
+            panic!("caller is not an approved approver for this group");
+        }
 
         let mut expenses: Map<u32, Expense> = env
             .storage()
@@ -130,13 +145,40 @@ impl TreasuryContract {
     }
 
     /// Set the number of approvals required to execute a payment for a group.
-    /// Caller must be authorized. Typically called once when the group is configured.
+    /// Only the group admin may call this. The first caller for a group becomes its admin.
     pub fn set_approvals_required(env: Env, group_id: u64, setter: Address, required: u32) {
         setter.require_auth();
+
+        let admin_key = DataKey::GroupAdmin(group_id);
+        if let Some(admin) = env.storage().persistent().get::<_, Address>(&admin_key) {
+            if setter != admin {
+                panic!("only group admin can set approvals required");
+            }
+        } else {
+            env.storage().persistent().set(&admin_key, &setter);
+        }
 
         env.storage()
             .persistent()
             .set(&DataKey::ApprovalsRequired(group_id), &required);
+    }
+
+    /// Set the list of addresses that may call approve_expense for this group. Only the group admin may call this.
+    pub fn set_group_approvers(env: Env, group_id: u64, admin: Address, approvers: Vec<Address>) {
+        admin.require_auth();
+
+        let stored_admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::GroupAdmin(group_id))
+            .expect("Group admin not set for group");
+        if admin != stored_admin {
+            panic!("only group admin can set group approvers");
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::GroupApprovers(group_id), &approvers);
     }
 
     /// Execute payment once the on-chain approval threshold for the group is met.
@@ -215,6 +257,20 @@ impl TreasuryContract {
         env.storage()
             .persistent()
             .get(&DataKey::ApprovalsRequired(group_id))
+    }
+
+    /// Get the group admin (None if not set).
+    pub fn get_group_admin(env: Env, group_id: u64) -> Option<Address> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::GroupAdmin(group_id))
+    }
+
+    /// Get the list of addresses that may approve expenses for this group (None if not set).
+    pub fn get_group_approvers(env: Env, group_id: u64) -> Option<Vec<Address>> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::GroupApprovers(group_id))
     }
 
     /// Get expense details

@@ -24,8 +24,12 @@ fn test_full_treasury_flow() {
     // 1️⃣ Deposit 1000
     client.deposit(&group_id, &user1, &1000);
 
-    // Set approvals required for group (on-chain threshold)
+    // Set approvals required for group (on-chain threshold); user1 becomes group admin
     client.set_approvals_required(&group_id, &user1, &1);
+
+    // Admin sets who may approve expenses (user1 in this case)
+    let approvers = soroban_sdk::vec![&env, user1.clone()];
+    client.set_group_approvers(&group_id, &user1, &approvers);
 
     // Check balance
     let balance = client.get_balance(&group_id);
@@ -71,6 +75,46 @@ fn test_propose_expense_rejects_zero() {
     let user = Address::generate(&env);
     let description = Bytes::from_slice(&env, b"Zero expense");
     client.propose_expense(&group_id, &user, &0, &description);
+}
+
+#[test]
+#[should_panic(expected = "only group admin can set approvals required")]
+fn test_set_approvals_required_requires_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(TreasuryContract, ());
+    let client = TreasuryContractClient::new(&env, &contract_id);
+    let group_id: u64 = 1;
+    let admin = Address::generate(&env);
+    let other = Address::generate(&env);
+
+    // Admin sets approvals first (becomes group admin)
+    client.set_approvals_required(&group_id, &admin, &1);
+
+    // Other address must not be able to change it
+    client.set_approvals_required(&group_id, &other, &0);
+}
+
+#[test]
+#[should_panic(expected = "caller is not an approved approver for this group")]
+fn test_approve_expense_requires_approver_membership() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(TreasuryContract, ());
+    let client = TreasuryContractClient::new(&env, &contract_id);
+    let group_id: u64 = 1;
+    let admin = Address::generate(&env);
+    let outsider = Address::generate(&env);
+
+    client.set_approvals_required(&group_id, &admin, &1);
+    let approvers = soroban_sdk::vec![&env, admin.clone()];
+    client.set_group_approvers(&group_id, &admin, &approvers);
+
+    let description = Bytes::from_slice(&env, b"Expense");
+    client.propose_expense(&group_id, &admin, &100, &description);
+
+    // Outsider is not in approvers list
+    client.approve_expense(&group_id, &1, &outsider);
 }
 
 #[test]
