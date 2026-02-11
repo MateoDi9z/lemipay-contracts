@@ -48,7 +48,7 @@ impl GroupContract {
         };
 
         env.storage()
-            .instance()
+            .persistent()
             .set(&DataKey::Group(counter), &group);
 
         env.storage()
@@ -61,7 +61,7 @@ impl GroupContract {
     /// Returns group data
     pub fn get_group(env: Env, group_id: u64) -> Group {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Group(group_id))
             .expect("Group not found")
     }
