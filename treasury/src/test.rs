@@ -24,6 +24,9 @@ fn test_full_treasury_flow() {
     // 1️⃣ Deposit 1000
     client.deposit(&group_id, &user1, &1000);
 
+    // Set approvals required for group (on-chain threshold)
+    client.set_approvals_required(&group_id, &user1, &1);
+
     // Check balance
     let balance = client.get_balance(&group_id);
 
@@ -43,8 +46,8 @@ fn test_full_treasury_flow() {
     // 3️⃣ Approve expense (user1)
     client.approve_expense(&group_id, &expense_id, &user1);
 
-    // 4️⃣ Execute payment requiring 1 approval
-    client.execute_payment(&group_id, &expense_id, &1);
+    // 4️⃣ Execute payment (threshold 1 is stored on-chain; caller must be authorized)
+    client.execute_payment(&group_id, &expense_id, &user1);
 
     // 5️⃣ Verify new balance
     let new_balance = client.get_balance(&group_id);

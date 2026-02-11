@@ -18,6 +18,8 @@ pub struct Expense {
 pub enum DataKey {
     Balance(u64),
     Expenses(u64),
+    /// Required number of approvals to execute a payment (per group). Must be set before execute_payment.
+    ApprovalsRequired(u64),
 }
 
 #[contract]
@@ -29,6 +31,10 @@ impl TreasuryContract {
     /// Deposit funds into group balance
     pub fn deposit(env: Env, group_id: u64, from: Address, amount: i128) {
         from.require_auth();
+        
+        if amount <= 0 {
+            panic!("amount must be positive");
+        }
 
         let mut balance: i128 = env
             .storage()
@@ -113,14 +119,32 @@ impl TreasuryContract {
             .set(&DataKey::Expenses(group_id), &expenses);
     }
 
-    /// Execute payment once approvals are enough
-    /// (approval count validation happens off-chain or via GroupContract call later)
+    /// Set the number of approvals required to execute a payment for a group.
+    /// Caller must be authorized. Typically called once when the group is configured.
+    pub fn set_approvals_required(env: Env, group_id: u64, setter: Address, required: u32) {
+        setter.require_auth();
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::ApprovalsRequired(group_id), &required);
+    }
+
+    /// Execute payment once the on-chain approval threshold for the group is met.
+    /// Caller must be authorized. Threshold is read from storage, not from the caller.
     pub fn execute_payment(
         env: Env,
         group_id: u64,
         expense_id: u32,
-        approvals_required: u32,
+        caller: Address,
     ) {
+        caller.require_auth();
+
+        let approvals_required: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ApprovalsRequired(group_id))
+            .expect("Approvals required not set for group");
+
         let mut expenses: Map<u32, Expense> = env
             .storage()
             .persistent()
@@ -168,6 +192,13 @@ impl TreasuryContract {
             .persistent()
             .get(&DataKey::Balance(group_id))
             .unwrap_or(0)
+    }
+
+    /// Get required number of approvals for a group (None if not set).
+    pub fn get_approvals_required(env: Env, group_id: u64) -> Option<u32> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::ApprovalsRequired(group_id))
     }
 
     /// Get expense details
