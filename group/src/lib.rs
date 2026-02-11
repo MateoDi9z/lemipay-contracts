@@ -30,7 +30,20 @@ impl GroupContract {
         members: Vec<Address>,
         approvals_required: u32,
     ) -> u64 {
-        if approvals_required == 0 || approvals_required > members.len() {
+        if approvals_required == 0 {
+            panic!("Invalid approval rule");
+        }
+
+        // Ensure there are no duplicate members
+        for i in 0..members.len() {
+            for j in (i + 1)..members.len() {
+                if members.get(i).unwrap() == members.get(j).unwrap() {
+                    panic!("Duplicate members detected");
+                }
+            }
+        }
+
+        if approvals_required > members.len() as u32 {
             panic!("Invalid approval rule");
         }
 
