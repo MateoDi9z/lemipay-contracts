@@ -30,7 +30,7 @@ impl GroupContract {
         members: Vec<Address>,
         approvals_required: u32,
     ) -> u64 {
-        if approvals_required == 0 || approvals_required > members.len() as u32 {
+        if approvals_required == 0 || approvals_required > members.len() {
             panic!("Invalid approval rule");
         }
 
@@ -78,3 +78,6 @@ impl GroupContract {
         group.approvals_required
     }
 }
+
+#[cfg(test)]
+mod test;
