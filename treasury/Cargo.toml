@@ -1,6 +1,6 @@
 [package]
-name = "treasury"
-version = "0.1.0"
+name = "treasury_contract"
+version = "0.1.1"
 
 edition = "2024"
 

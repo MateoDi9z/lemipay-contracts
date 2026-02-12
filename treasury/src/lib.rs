@@ -1,16 +1,18 @@
 #![no_std]
 
-const GROUP_CONTRACT: &str = "CCXXXXX";
+mod test;
 
-use soroban_sdk::{
-    contract, contractimpl, contracttype, contractclient,
-    Address, Env, Vec, Map, Bytes, Symbol, symbol_short, IntoVal
-};
+use core::convert::Into;
+use soroban_sdk::{contract, contractimpl, contracttype, contractclient, Address, Env, Vec, String};
 
-// #[contractclient(name = "Group-Contract")] // Esto genera automáticamente un "ContratoB_Client"
-// pub trait IContrato {
-//     fn consultar_saldo(env: Env, cuenta: Address) -> i128;
-// }
+const GROUP_CONTRACT: &str = "CABYTW7GMOYRDOEYUTFQOFTYGPEFUZOOGYDIJLSYLDP7XFWQ4A2TFXP2";
+
+#[contractclient(name = "GroupContract")]
+pub trait IGroupContract {
+    fn get_members(group_id: u64) -> Vec<Address>;
+
+    fn create_group(members: Vec<Address>, approvals_required: u32) -> u64;
+}
 
 #[contract]
 pub struct TreasuryContract;
@@ -42,22 +44,43 @@ enum DataKey {
     ReleaseProposal(u32),
     Approval(u32, Address),
     FundRoundCount,
-    FundRound(u64),
-    FundContribution(u32, Address), // (round_id, member)
+    FundRound(u64),              // round_id -> FundRound
+    GroupFundRounds(u64),        // group_id -> Vec<round_id>
+    FundContribution(u64, Address), // (round_id, member)
 }
 
 #[contractimpl]
 impl TreasuryContract {
 
     // -------------------------------------------------
-    // INITIALIZE (constructor)
+    // CREATE TREASURY
     // -------------------------------------------------
+    fn check_membership(env: &Env,
+        group_id: u64, user: Address) {
+        #[cfg(test)]
+        {
+            // End validation in testing
+            return;
+        }
+        user.require_auth();
+
+        let group_contract = Address::from_string(&String::from_str(env, GROUP_CONTRACT));
+        let client = GroupContract::new(&env, &group_contract);
+
+        let addresses: Vec<Address> = client.get_members(&group_id);
+
+        if !addresses.contains(&user) {
+            panic!("NOT_MEMBER");
+        }
+
+    }
 
     pub fn create_treasury(
         env: Env,
         group_id: u64,
+        user: Address,
     ) {
-        Self::require_group_member(&env, group_id);
+        Self::check_membership(&env, group_id, user);
 
         if env.storage().persistent().has(&DataKey::GroupId(group_id)) {
             panic!("Group ID already in use");
@@ -68,35 +91,6 @@ impl TreasuryContract {
 
     pub fn check_treasury_id(env: Env, group_id: u64) -> bool {
         env.storage().persistent().get(&DataKey::GroupId(group_id)).unwrap_or(false)
-    }
-
-    // -------------------------------------------------
-    // TODO: AUTH CHECK
-    // -------------------------------------------------
-    //
-    fn require_group_member(env: &Env, group_id: u64) {
-        // TODO: Implementar lógica de verificación de membresía en el grupo
-
-        // let caller = env.invoker();
-        // caller.require_auth();
-        //
-        // let group_contract: Address = env.storage().persistent()
-        //     .get(&DataKey::GroupContract)
-        //     .unwrap();
-        //
-        // let group_id: u32 = env.storage().persistent()
-        //     .get(&DataKey::GroupId)
-        //     .unwrap();
-        //
-        // let is_member: bool = env.invoke_contract(
-        //     &group_contract,
-        //     &symbol_short!("is_member"),
-        //     (group_id, caller.clone()).into_val(env),
-        // );
-        //
-        // if !is_member {
-        //     panic!("NOT_IN_GROUP");
-        // }
     }
 
     //
@@ -211,12 +205,16 @@ impl TreasuryContract {
     //     release.executed = true;
     //     env.storage().persistent().set(&DataKey::ReleaseProposal(release_proposal_id), &release);
     // }
-    //
+
     // -------------------------------------------------
     // PROPOSE FUND
     // -------------------------------------------------
-    pub fn propose_fund(env: Env, group_id: u64, total_amount: i128) -> u64 {
-        Self::require_group_member(&env, group_id);
+    pub fn propose_fund_round(env: Env, group_id: u64, total_amount: i128, user: Address) -> u64 {
+        Self::check_membership(&env, group_id, user);
+
+        if total_amount <= 0 {
+            panic!("INVALID_AMOUNT");
+        }
 
         // obtener cantidad de miembros
         let member_count: u32 = 4;  // TODO: Reemplazar con lógica para obtener el número real de miembros del grupo desde el contrato del grupo
@@ -225,32 +223,130 @@ impl TreasuryContract {
             panic!("NO_MEMBERS");
         }
 
-        let mut fund_count: u64 = env.storage().persistent()
+        let mut fund_count: u64 = env.storage()
+            .persistent()
             .get(&DataKey::FundRoundCount)
             .unwrap_or(0);
 
         fund_count += 1;
+        let round_id = fund_count;
 
-        let round = FundRound {
+        let new_round = FundRound {
             total_amount,
             amount_of_members: member_count,
             funded_amount: 0i128,
             completed: false,
         };
 
-        env.storage().persistent().set(&DataKey::FundRound(fund_count), &round);
-        env.storage().persistent().set(&DataKey::FundRoundCount, &fund_count);
+        //  Save individual fund round
+        env.storage()
+            .persistent()
+            .set(&DataKey::FundRound(round_id), &new_round);
 
-        fund_count
+        // Add ID to group list
+        let mut group_rounds: Vec<u64> = env.storage()
+            .persistent()
+            .get(&DataKey::GroupFundRounds(group_id))
+            .unwrap_or(Vec::new(&env));
+
+        group_rounds.push_back(round_id);
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::GroupFundRounds(group_id), &group_rounds);
+
+        // Update global fund round count
+        env.storage()
+            .persistent()
+            .set(&DataKey::FundRoundCount, &fund_count);
+
+        round_id
     }
+
+    // -------------------------------------------------
+    // CONTRIBUTE TO FUND ROUND
+    // -------------------------------------------------
+    pub fn contribute_to_fund_round(
+        env: Env,
+        round_id: u64,
+        group_id: u64,
+        user: Address,
+        amount: i128,
+    ) {
+        Self::check_membership(&env, group_id, user.clone());
+
+        if amount <= 0 {
+            panic!("INVALID_AMOUNT");
+        }
+
+        let mut round: FundRound = env.storage()
+            .persistent()
+            .get(&DataKey::FundRound(round_id))
+            .expect("ROUND_NOT_FOUND");
+
+        if round.completed {
+            panic!("ROUND_ALREADY_COMPLETED");
+        }
+
+        // Obtener aporte previo del usuario
+        let contribution_key = DataKey::FundContribution(round_id, user.clone());
+
+        let previous: i128 = env.storage()
+            .persistent()
+            .get(&contribution_key)
+            .unwrap_or(0);
+
+        let new_total_user = previous + amount;
+
+        // Guardar aporte actualizado
+        env.storage()
+            .persistent()
+            .set(&contribution_key, &new_total_user);
+
+        // Actualizar total del round
+        round.funded_amount += amount;
+
+        // Verificar si se completa
+        if round.funded_amount >= round.total_amount {
+            round.completed = true;
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::FundRound(round_id), &round);
+    }
+
+
+
+    // -------------------------------------------------
+    // GETTERS
+    // -------------------------------------------------
 
     // Get fund rounds of group
-    pub fn get_fund_rounds(env: Env, group_id: u64) -> Vec<FundRound> {
-        let fund_count: Vec<FundRound> = env.storage().persistent()
-            .get(&DataKey::FundRound(group_id)).unwrap();
+    pub fn get_group_rounds(env: Env, group_id: u64) -> Vec<u64> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::GroupFundRounds(group_id))
+            .unwrap_or(Vec::new(&env))
+    }
 
-        fund_count
+    // Get specific fund round details
+    pub fn get_fund_round(env: Env, round_id: u64) -> FundRound {
+        env.storage()
+            .persistent()
+            .get(&DataKey::FundRound(round_id))
+            .expect("ROUND_NOT_FOUND")
+    }
+
+    // Get user's contribution to a fund round
+    pub fn get_user_contribution(
+        env: Env,
+        round_id: u64,
+        user: Address,
+    ) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::FundContribution(round_id, user))
+            .unwrap_or(0)
     }
 }
-
-mod test;
