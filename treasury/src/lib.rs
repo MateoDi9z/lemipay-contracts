@@ -172,7 +172,7 @@ impl TreasuryContract {
         if release.executed {
             panic!("ALREADY_EXECUTED");
         }
-        
+
         if release.destination == user {
             panic!("DESTINATION_CANNOT_APPROVE");
         }
@@ -197,9 +197,18 @@ impl TreasuryContract {
     // -------------------------------------------------
     // EXECUTE (USDC hardcoded)
     // -------------------------------------------------
+    pub fn execute_release(env: Env, release_proposal_id: u64) {
 
-    fn execute_release(env: Env, release_proposal_id: u64) {
-        /*
+        let mut release: ReleaseProposal = env.storage()
+            .persistent()
+            .get(&DataKey::ReleaseProposal(release_proposal_id))
+            .expect("PROPOSAL_NOT_FOUND");
+
+        if release.executed {
+            panic!("ALREADY_EXECUTED");
+        }
+
+        // obtener threshold
         #[cfg(test)]
         let min: u32 = 1;
 
@@ -209,43 +218,18 @@ impl TreasuryContract {
             let client = GroupContract::new(&env, &group_contract);
             client.get_approval_rule(&release.group_id)
         };
-        */
 
-    //
-    //     let mut release: ReleaseProposal = env.storage()
-    //         .persistent()
-    //         .get(&DataKey::ReleaseProposal(release_proposal_id))
-    //         .unwrap();
-    //
-    //     if release.executed {
-    //         panic!("ALREADY_EXECUTED");
-    //     }
-    //
-    //     let min: u32 = env.storage().persistent()
-    //         .get(&DataKey::MinApprovals)
-    //         .unwrap();
-    //
-    //     if release.approvals < min {
-    //         panic!("NOT_ENOUGH_APPROVALS");
-    //     }
-    //
-    //     // USDC Testnet address (ejemplo)
-    //     let usdc = Address::from_string(&env, &"CDLZFC3SYL...".into());
-    //
-    //     let contract_address = env.current_contract_address();
-    //
-    //     env.invoke_contract::<()>(
-    //         &usdc,
-    //         &symbol_short!("transfer"),
-    //         (
-    //             contract_address,
-    //             release.destination.clone(),
-    //             release.amount,
-    //         ).into_val(&env),
-    //     );
-    //
-    //     release.executed = true;
-    //     env.storage().persistent().set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+        if release.approvals < min {
+            panic!("NOT_ENOUGH_APPROVALS");
+        }
+
+        // TODO: real USDC transfer
+
+        release.executed = true;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
     }
 
     // -------------------------------------------------

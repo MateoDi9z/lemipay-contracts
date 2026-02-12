@@ -210,5 +210,46 @@ mod test {
         client.approve_release(&proposal_id, &user);
     }
 
+    #[test]
+    fn test_execute_after_approval() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+
+        let user = Address::generate(&env);
+        let dest = Address::generate(&env);
+        let group_id = 1;
+
+        let proposal_id = client.propose_release(&dest, &1000, &group_id, &user);
+
+        client.approve_release(&proposal_id, &user);
+
+        client.execute_release(&proposal_id);
+
+        let proposal = client.get_release_proposal(&proposal_id);
+
+        assert!(proposal.executed);
+    }
+
+    #[test]
+    #[should_panic(expected = "NOT_ENOUGH_APPROVALS")]
+    fn test_execute_without_threshold_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+
+        let user1 = Address::generate(&env);
+        let dest = Address::generate(&env);
+        let group_id = 1;
+
+        let proposal_id = client.propose_release(&dest, &1000, &group_id, &user1);
+
+        // no approve
+        client.execute_release(&proposal_id);
+    }
 }
 
