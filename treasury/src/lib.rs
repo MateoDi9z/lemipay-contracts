@@ -23,6 +23,7 @@ pub struct TreasuryContract;
 #[derive(Clone)]
 #[contracttype]
 pub struct ReleaseProposal {
+    pub group_id: u64,
     pub destination: Address,
     pub amount: i128,
     pub approvals: u32,
@@ -43,29 +44,32 @@ pub struct FundRound {
 enum DataKey {
     TreasuryId,
     GroupId(u64),
-    ReleaseProposalCount,
-    ReleaseProposal(u32),
-    Approval(u32, Address),
-    FundRoundCount,
-    FundRound(u64),              // round_id -> FundRound
-    GroupFundRounds(u64),        // group_id -> Vec<round_id>
+
+    // Release proposal related keys
+    ReleaseProposalCount,           // id generator
+    ReleaseProposal(u64),           // proposal_id -> struct
+    GroupReleaseProposals(u64),     // group_id -> Vec<proposal_id>
+    ReleaseApproval(u64, Address),  // (proposal_id, user)
+
+    // Fund round related keys
+    FundRoundCount,                 // id generator
+    FundRound(u64),                 // round_id -> FundRound
+    GroupFundRounds(u64),           // group_id -> Vec<round_id>
     FundContribution(u64, Address), // (round_id, member)
 }
 
 #[contractimpl]
 impl TreasuryContract {
 
-    // -------------------------------------------------
-    // CREATE TREASURY
-    // -------------------------------------------------
+    /// ------------------------------------------------
+    /// HELPERS
+    /// ------------------------------------------------
+
+    /// Check if user is member of group, panics if not. In tests, this is bypassed to simplify testing.
     fn check_membership(env: &Env,
-        group_id: u64, user: Address) {
-        #[cfg(test)]
-        {
-            // End validation in testing
-            return;
-        }
-        user.require_auth();
+                        group_id: u64, user: Address) {
+        #[cfg(test)] // Only for testing, skip actual membership check to simplify tests
+        { return; }
 
         let group_contract = Address::from_string(&String::from_str(env, GROUP_CONTRACT));
         let client = GroupContract::new(&env, &group_contract);
@@ -75,15 +79,25 @@ impl TreasuryContract {
         if !addresses.contains(&user) {
             panic!("NOT_MEMBER");
         }
-
     }
 
+    /// CHECK IF TREASURY EXISTS FOR GROUP ID
+    pub fn check_treasury_id(env: Env, group_id: u64) -> bool {
+        env.storage().persistent().get(&DataKey::GroupId(group_id)).unwrap_or(false)
+    }
+
+    /// ------------------------------------------------
+    /// CORE FUNCTIONS
+    /// ------------------------------------------------
+
+    /// CREATE TREASURY
     pub fn create_treasury(
         env: Env,
         group_id: u64,
         user: Address,
     ) {
-        Self::check_membership(&env, group_id, user);
+        user.require_auth();                                    // Auth user
+        Self::check_membership(&env, group_id, user.clone());   // Check membership
 
         if env.storage().persistent().has(&DataKey::GroupId(group_id)) {
             panic!("Group ID already in use");
@@ -92,42 +106,56 @@ impl TreasuryContract {
         env.storage().persistent().set(&DataKey::GroupId(group_id), &true);
     }
 
-    pub fn check_treasury_id(env: Env, group_id: u64) -> bool {
-        env.storage().persistent().get(&DataKey::GroupId(group_id)).unwrap_or(false)
+
+    /// PROPOSE RELEASE
+    pub fn propose_release(
+        env: Env,
+        destination: Address,
+        amount: i128,
+        group_id: u64,
+        user: Address,
+    ) -> u64 {
+        user.require_auth();                                            // Auth user
+        Self::check_membership(&env, group_id, user.clone());           // Check membership
+        Self::check_membership(&env, group_id, destination.clone());    // Check destination is member
+        // TODO: Upgrade, check both addresses in same iteration
+
+        if amount <= 0 {
+            panic!("INVALID_AMOUNT");
+        }
+
+        let mut count: u64 = env.storage()
+            .persistent()
+            .get(&DataKey::ReleaseProposalCount)
+            .unwrap_or(0);
+
+        count += 1;
+
+        let proposal = ReleaseProposal {
+            group_id,
+            destination,
+            amount,
+            approvals: 0,
+            executed: false,
+        };
+
+        let mut group_proposals: Vec<u64> = env.storage()
+            .persistent()
+            .get(&DataKey::GroupReleaseProposals(group_id))
+            .unwrap_or(Vec::new(&env));
+
+        group_proposals.push_back(count);
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::GroupReleaseProposals(group_id), &group_proposals);
+
+        env.storage().persistent().set(&DataKey::ReleaseProposal(count), &proposal);
+        env.storage().persistent().set(&DataKey::ReleaseProposalCount, &count);
+
+        count
     }
 
-    //
-    // // -------------------------------------------------
-    // // PROPOSE RELEASE
-    // // -------------------------------------------------
-    //
-    // pub fn propose_release(
-    //     env: Env,
-    //     destination: Address,
-    //     amount: i128,
-    // ) -> u32 {
-    //
-    //     Self::require_group_member(&env);
-    //
-    //     let mut count: u32 = env.storage().persistent()
-    //         .get(&DataKey::ReleaseProposalCount)
-    //         .unwrap();
-    //
-    //     count += 1;
-    //
-    //     let proposal = ReleaseProposal {
-    //         destination,
-    //         amount,
-    //         approvals: 0,
-    //         executed: false,
-    //     };
-    //
-    //     env.storage().persistent().set(&DataKey::ReleaseProposal(count), &proposal);
-    //     env.storage().persistent().set(&DataKey::ReleaseProposalCount, &count);
-    //
-    //     count
-    // }
-    //
     // // -------------------------------------------------
     // // APPROVE
     // // -------------------------------------------------
@@ -213,7 +241,8 @@ impl TreasuryContract {
     // PROPOSE FUND
     // -------------------------------------------------
     pub fn propose_fund_round(env: Env, group_id: u64, total_amount: i128, user: Address) -> u64 {
-        Self::check_membership(&env, group_id, user);
+        user.require_auth();                            // Auth user
+        Self::check_membership(&env, group_id, user);   // Check membership
 
         if total_amount <= 0 {
             panic!("INVALID_AMOUNT");
@@ -276,7 +305,8 @@ impl TreasuryContract {
         user: Address,
         amount: i128,
     ) {
-        Self::check_membership(&env, group_id, user.clone());
+        user.require_auth();                                    // Auth user
+        Self::check_membership(&env, group_id, user.clone());   // Check membership
 
         if amount <= 0 {
             panic!("INVALID_AMOUNT");
@@ -364,5 +394,21 @@ impl TreasuryContract {
             .persistent()
             .get(&DataKey::FundContribution(round_id, user))
             .unwrap_or(0)
+    }
+
+    // Get release proposal details by Group ID
+    pub fn get_release_proposals_of_group(env: Env, group_id: u64) -> Vec<u64> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::GroupReleaseProposals(group_id))
+            .unwrap_or(Vec::new(&env))
+    }
+
+    // Get specific release proposal details
+    pub fn get_release_proposal(env: Env, proposal_id: u64) -> ReleaseProposal {
+        env.storage()
+            .persistent()
+            .get(&DataKey::ReleaseProposal(proposal_id))
+            .expect("PROPOSAL_NOT_FOUND")
     }
 }

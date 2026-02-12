@@ -50,6 +50,8 @@ mod test {
         assert!(exists);
     }
 
+    /// FUND ROUND
+
     #[test]
     fn test_propose_found_round() {
         let env = Env::default();
@@ -132,5 +134,35 @@ mod test {
         client.propose_fund_round(&group_id, &-1000, &user);
     }
 
+    /// RELEASE
+
+    #[test]
+    fn test_propose_release() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+
+        let user = Address::generate(&env);
+        let destination = Address::generate(&env);
+        let group_id = 1;
+
+        let proposal_id = client.propose_release(
+            &destination,
+            &1000,
+            &group_id,
+            &user,
+        );
+
+        assert_eq!(proposal_id, 1);
+
+        let proposal = client.get_release_proposal(&proposal_id);
+
+        assert_eq!(proposal.group_id, group_id);
+        assert_eq!(proposal.amount, 1000);
+        assert_eq!(proposal.approvals, 0);
+        assert!(!proposal.executed);
+    }
 }
 
