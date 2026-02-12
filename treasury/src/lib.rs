@@ -223,13 +223,44 @@ impl TreasuryContract {
             panic!("NOT_ENOUGH_APPROVALS");
         }
 
-        // TODO: real USDC transfer
+        let usdc_address = Address::from_str(&env, USDC_ADDRESS);
 
-        release.executed = true;
+        let token = TokenClient::new(&env, &usdc_address);
 
-        env.storage()
-            .persistent()
-            .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+        let contract_address = env.current_contract_address();
+
+        #[cfg(test)]
+        {
+            release.executed = true;
+            env.storage().persistent().set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+            return;
+        }
+
+        #[cfg(not(test))]
+        {
+            let usdc_address = Address::from_str(&env, USDC_ADDRESS);
+            let token = TokenClient::new(&env, &usdc_address);
+
+            let treasury_address = env.current_contract_address();
+
+            let current_balance = token.balance(&treasury_address);
+
+            if current_balance < release.amount {
+                panic!("INSUFFICIENT_TREASURY_BALANCE");
+            }
+
+            token.transfer(
+                &treasury_address,
+                &release.destination,
+                &release.amount,
+            );
+
+            release.executed = true;
+
+            env.storage()
+                .persistent()
+                .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+        }
     }
 
     // -------------------------------------------------
