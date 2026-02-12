@@ -6,6 +6,9 @@ use core::convert::Into;
 use soroban_sdk::{contract, contractimpl, contracttype, contractclient, Address, Env, Vec, String};
 
 const GROUP_CONTRACT: &str = "CABYTW7GMOYRDOEYUTFQOFTYGPEFUZOOGYDIJLSYLDP7XFWQ4A2TFXP2";
+const USDC_ADDRESS: &str = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
+
+use soroban_sdk::token::Client as TokenClient;
 
 #[contractclient(name = "GroupContract")]
 pub trait IGroupContract {
@@ -287,6 +290,19 @@ impl TreasuryContract {
         if round.completed {
             panic!("ROUND_ALREADY_COMPLETED");
         }
+
+        let usdc_address = Address::from_str(&env, USDC_ADDRESS);
+        let token = TokenClient::new(&env, &usdc_address);
+
+        if token.balance(&user) < amount {
+            panic!("insufficient balance");
+        }
+
+        token.transfer(
+            &user,
+            &env.current_contract_address(),
+            &amount,
+        );
 
         // Obtener aporte previo del usuario
         let contribution_key = DataKey::FundContribution(round_id, user.clone());
