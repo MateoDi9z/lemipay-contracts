@@ -15,6 +15,8 @@ pub trait IGroupContract {
     fn get_members(group_id: u64) -> Vec<Address>;
 
     fn create_group(members: Vec<Address>, approvals_required: u32) -> u64;
+
+    fn get_approval_rule(env: Env, group_id: u64) -> u32;
 }
 
 #[contract]
@@ -69,15 +71,17 @@ impl TreasuryContract {
     fn check_membership(env: &Env,
                         group_id: u64, user: Address) {
         #[cfg(test)] // Only for testing, skip actual membership check to simplify tests
-        { return; }
+        return;
 
-        let group_contract = Address::from_string(&String::from_str(env, GROUP_CONTRACT));
-        let client = GroupContract::new(&env, &group_contract);
+        #[cfg(not(test))] {
+            let group_contract = Address::from_string(&String::from_str(&env, GROUP_CONTRACT));
+            let client = GroupContract::new(&env, &group_contract);
 
-        let addresses: Vec<Address> = client.get_members(&group_id);
+            let addresses: Vec<Address> = client.get_members(&group_id);
 
-        if !addresses.contains(&user) {
-            panic!("NOT_MEMBER");
+            if !addresses.contains(&user) {
+                panic!("NOT_MEMBER");
+            }
         }
     }
 
@@ -118,7 +122,7 @@ impl TreasuryContract {
         user.require_auth();                                            // Auth user
         Self::check_membership(&env, group_id, user.clone());           // Check membership
         Self::check_membership(&env, group_id, destination.clone());    // Check destination is member
-        // TODO: Upgrade, check both addresses in same iteration
+        // TODO: Upgrade, check both addresses in same iteration & custom error
 
         if amount <= 0 {
             panic!("INVALID_AMOUNT");
@@ -156,50 +160,57 @@ impl TreasuryContract {
         count
     }
 
-    // // -------------------------------------------------
-    // // APPROVE
-    // // -------------------------------------------------
-    //
-    // pub fn approve_release(env: Env, release_proposal_id: u32) {
-    //
-    //     Self::require_group_member(&env);
-    //
-    //     let caller = env.invoker();
-    //
-    //     let mut release: ReleaseProposal = env.storage()
-    //         .persistent()
-    //         .get(&DataKey::ReleaseProposal(release_proposal_id))
-    //         .unwrap();
-    //
-    //     if release.executed {
-    //         panic!("ALREADY_EXECUTED");
-    //     }
-    //
-    //     let approval_key = DataKey::Approval(release_proposal_id, caller.clone());
-    //
-    //     if env.storage().persistent().has(&approval_key) {
-    //         panic!("ALREADY_APPROVED");
-    //     }
-    //
-    //     env.storage().persistent().set(&approval_key, &true);
-    //     release.approvals += 1;
-    //
-    //     env.storage().persistent().set(&DataKey::ReleaseProposal(release_proposal_id), &release);
-    //
-    //     let min: u32 = env.storage().persistent()
-    //         .get(&DataKey::MinApprovals)
-    //         .unwrap();
-    //
-    //     if release.approvals >= min {
-    //         Self::execute_release(env, release_proposal_id);
-    //     }
-    // }
-    //
-    // // -------------------------------------------------
-    // // EXECUTE (USDC hardcoded)
-    // // -------------------------------------------------
-    //
-    // fn execute_release(env: Env, release_proposal_id: u32) {
+    /// APPROVE RELEASE
+    pub fn approve_release(env: Env, release_proposal_id: u64, user: Address) {
+        user.require_auth();
+
+        let mut release: ReleaseProposal = env.storage()
+            .persistent()
+            .get(&DataKey::ReleaseProposal(release_proposal_id))
+            .expect("PROPOSAL_NOT_FOUND");
+
+        if release.executed {
+            panic!("ALREADY_EXECUTED");
+        }
+        
+        if release.destination == user {
+            panic!("DESTINATION_CANNOT_APPROVE");
+        }
+
+        Self::check_membership(&env, release.group_id, user.clone());
+
+        let approval_key = DataKey::ReleaseApproval(release_proposal_id, user.clone());
+
+        if env.storage().persistent().has(&approval_key) {
+            panic!("ALREADY_APPROVED");
+        }
+
+        env.storage().persistent().set(&approval_key, &true);
+
+        release.approvals += 1;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+    }
+
+    // -------------------------------------------------
+    // EXECUTE (USDC hardcoded)
+    // -------------------------------------------------
+
+    fn execute_release(env: Env, release_proposal_id: u64) {
+        /*
+        #[cfg(test)]
+        let min: u32 = 1;
+
+        #[cfg(not(test))]
+        let min: u32 = {
+            let group_contract = Address::from_string(&String::from_str(&env, GROUP_CONTRACT));
+            let client = GroupContract::new(&env, &group_contract);
+            client.get_approval_rule(&release.group_id)
+        };
+        */
+
     //
     //     let mut release: ReleaseProposal = env.storage()
     //         .persistent()
@@ -235,7 +246,7 @@ impl TreasuryContract {
     //
     //     release.executed = true;
     //     env.storage().persistent().set(&DataKey::ReleaseProposal(release_proposal_id), &release);
-    // }
+    }
 
     // -------------------------------------------------
     // PROPOSE FUND

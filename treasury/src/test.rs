@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod test {
-
     use soroban_sdk::{
         testutils::{Address as _},
         Address, Env
@@ -164,5 +163,52 @@ mod test {
         assert_eq!(proposal.approvals, 0);
         assert!(!proposal.executed);
     }
+
+    #[test]
+    fn test_approve_does_not_execute() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+
+        let user = Address::generate(&env);
+        let dest = Address::generate(&env);
+        let group_id = 1;
+
+        let proposal_id = client.propose_release(&dest, &1000, &group_id, &user);
+
+        client.approve_release(&proposal_id, &user);
+
+        let proposal = client.get_release_proposal(&proposal_id);
+
+        assert_eq!(proposal.approvals, 1);
+        assert!(!proposal.executed); // 🔥 importante
+    }
+
+    #[test]
+    #[should_panic(expected = "DESTINATION_CANNOT_APPROVE")]
+    fn test_destination_cannot_approve() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+
+        let user = Address::generate(&env);
+        let group_id = 1;
+
+        // destination == user
+        let proposal_id = client.propose_release(
+            &user,      // 👈 mismo address
+            &1000,
+            &group_id,
+            &user,
+        );
+
+        // intenta aprobar el mismo que es destino
+        client.approve_release(&proposal_id, &user);
+    }
+
 }
 
