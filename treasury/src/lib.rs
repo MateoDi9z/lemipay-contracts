@@ -275,7 +275,18 @@ impl TreasuryContract {
         }
 
         // obtener cantidad de miembros
-        let member_count: u32 = 4;  // TODO: Reemplazar con lógica para obtener el número real de miembros del grupo desde el contrato del grupo
+        let mut member_count: u32 = 0;
+
+        #[cfg(test)] {
+             member_count = 4;
+        }
+        #[cfg(not(test))] {
+            let group_contract = Address::from_string(&String::from_str(&env, GROUP_CONTRACT));
+            let client = GroupContract::new(&env, &group_contract);
+
+            let members = client.get_members(&group_id);
+            member_count = members.len().try_into().expect("Too many members");
+        }
 
         if member_count == 0 {
             panic!("NO_MEMBERS");
