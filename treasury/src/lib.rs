@@ -86,6 +86,18 @@ impl TreasuryContract {
         }
     }
 
+    /// Check if treasury exists for group ID, panics if not.
+    fn assert_treasury_exists(env: &Env, group_id: u64) {
+        let exists = env.storage()
+            .persistent()
+            .get(&DataKey::GroupId(group_id))
+            .unwrap_or(false);
+
+        if !exists {
+            panic!("TREASURY_NOT_INITIALIZED");
+        }
+    }
+
 
     /// ------------------------------------------------
     /// CORE FUNCTIONS
@@ -120,6 +132,8 @@ impl TreasuryContract {
         Self::check_membership(&env, group_id, user.clone());           // Check membership
         Self::check_membership(&env, group_id, destination.clone());    // Check destination is member
         // TODO: Upgrade, check both addresses in same iteration & custom error
+        Self::assert_treasury_exists(&env, group_id);                   // Check treasury exists
+
 
         if amount <= 0 {
             panic!("INVALID_AMOUNT");
@@ -259,6 +273,7 @@ impl TreasuryContract {
     pub fn propose_fund_round(env: Env, group_id: u64, total_amount: i128, user: Address) -> u64 {
         user.require_auth();                            // Auth user
         Self::check_membership(&env, group_id, user);   // Check membership
+        Self::assert_treasury_exists(&env, group_id);   // Check treasury exists
 
         if total_amount <= 0 {
             panic!("INVALID_AMOUNT");
@@ -334,7 +349,7 @@ impl TreasuryContract {
         amount: i128,
         user: Address,
     ) {
-        user.require_auth();                                    // Auth user
+        user.require_auth();                            // Auth user
 
         if amount <= 0 {
             panic!("INVALID_AMOUNT");
@@ -345,7 +360,8 @@ impl TreasuryContract {
             .get(&DataKey::FundRound(round_id))
             .expect("ROUND_NOT_FOUND");
 
-        Self::check_membership(&env, round.group_id, user.clone());   // Check membership
+        Self::assert_treasury_exists(&env, round.group_id);         // Check treasury exists
+        Self::check_membership(&env, round.group_id, user.clone()); // Check membership
 
         if round.completed {
             panic!("ROUND_ALREADY_COMPLETED");
@@ -356,7 +372,7 @@ impl TreasuryContract {
             .total_amount
             .checked_sub(round.funded_amount)
             .expect("Invalid state: funded exceeds total");
-        
+
         // Block overshoot contributions.
         if amount > remaining {
             panic!("Contribution exceeds remaining target");
