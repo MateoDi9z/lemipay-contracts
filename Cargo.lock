@@ -566,7 +566,7 @@ dependencies = [
  "digest",
  "ff",
  "generic-array",
- "group 0.13.0",
+ "group",
  "rand_core",
  "sec1",
  "subtle",
@@ -645,13 +645,6 @@ dependencies = [
 
 [[package]]
 name = "group"
-version = "0.1.0"
-dependencies = [
- "soroban-sdk",
-]
-
-[[package]]
-name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
@@ -659,6 +652,13 @@ dependencies = [
  "ff",
  "rand_core",
  "subtle",
+]
+
+[[package]]
+name = "group_contract"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
 ]
 
 [[package]]
@@ -1595,8 +1595,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "treasury"
-version = "0.1.0"
+name = "treasury_contract"
+version = "0.1.1"
 dependencies = [
  "soroban-sdk",
 ]
