@@ -403,7 +403,9 @@ impl TreasuryContract {
             .unwrap_or(0);
 
         // Add new contribution to previous
-        let new_total_user = previous + amount;
+        let new_total_user = previous
+            .checked_add(amount)
+            .expect("Contribution overflow");
 
         // Save
         env.storage()
