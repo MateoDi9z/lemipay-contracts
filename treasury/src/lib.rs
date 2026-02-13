@@ -1,13 +1,14 @@
 #![no_std]
 
 mod test;
+mod config;
+
+use crate::config::{GROUP_CONTRACT, USDC_ADDRESS};
 
 use core::convert::Into;
-use soroban_sdk::{contract, contractimpl, contracttype, contractclient, Address, Env, Vec, String};
+use soroban_sdk::{contract, contractimpl, contracttype, contractclient, Address, Env, Vec};
 
-const GROUP_CONTRACT: &str = "CABYTW7GMOYRDOEYUTFQOFTYGPEFUZOOGYDIJLSYLDP7XFWQ4A2TFXP2";
-const USDC_ADDRESS: &str = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
-
+#[cfg(not(test))]
 use soroban_sdk::token::Client as TokenClient;
 
 #[contractclient(name = "GroupContract")]
@@ -69,13 +70,12 @@ impl TreasuryContract {
     /// ------------------------------------------------
 
     /// Check if user is member of group, panics if not. In tests, this is bypassed to simplify testing.
-    fn check_membership(env: &Env,
-                        group_id: u64, user: Address) {
+    fn check_membership(env: &Env, group_id: u64, user: Address) {
         #[cfg(test)] // Only for testing, skip actual membership check to simplify tests
         return;
 
         #[cfg(not(test))] {
-            let group_contract = Address::from_string(&String::from_str(&env, GROUP_CONTRACT));
+            let group_contract = Address::from_str(&env, config::GROUP_CONTRACT);
             let client = GroupContract::new(&env, &group_contract);
 
             let addresses: Vec<Address> = client.get_members(&group_id);
@@ -86,10 +86,6 @@ impl TreasuryContract {
         }
     }
 
-    /// CHECK IF TREASURY EXISTS FOR GROUP ID
-    pub fn check_treasury_id(env: Env, group_id: u64) -> bool {
-        env.storage().persistent().get(&DataKey::GroupId(group_id)).unwrap_or(false)
-    }
 
     /// ------------------------------------------------
     /// CORE FUNCTIONS
@@ -196,7 +192,7 @@ impl TreasuryContract {
     }
 
     // -------------------------------------------------
-    // EXECUTE (USDC hardcoded)
+    // EXECUTE (Release USDC)
     // -------------------------------------------------
     pub fn execute_release(env: Env, release_proposal_id: u64) {
 
@@ -209,13 +205,12 @@ impl TreasuryContract {
             panic!("ALREADY_EXECUTED");
         }
 
-        // obtener threshold
         #[cfg(test)]
         let min: u32 = 1;
 
         #[cfg(not(test))]
         let min: u32 = {
-            let group_contract = Address::from_string(&String::from_str(&env, GROUP_CONTRACT));
+            let group_contract = Address::from_str(&env, config::GROUP_CONTRACT);
             let client = GroupContract::new(&env, &group_contract);
             client.get_approval_rule(&release.group_id)
         };
@@ -223,12 +218,6 @@ impl TreasuryContract {
         if release.approvals < min {
             panic!("NOT_ENOUGH_APPROVALS");
         }
-
-        let usdc_address = Address::from_str(&env, USDC_ADDRESS);
-
-        let token = TokenClient::new(&env, &usdc_address);
-
-        let contract_address = env.current_contract_address();
 
         #[cfg(test)]
         {
@@ -239,7 +228,7 @@ impl TreasuryContract {
 
         #[cfg(not(test))]
         {
-            let usdc_address = Address::from_str(&env, USDC_ADDRESS);
+            let usdc_address = Address::from_str(&env, config::USDC_ADDRESS);
             let token = TokenClient::new(&env, &usdc_address);
 
             let treasury_address = env.current_contract_address();
@@ -265,7 +254,7 @@ impl TreasuryContract {
     }
 
     // -------------------------------------------------
-    // PROPOSE FUND
+    // PROPOSE FUND ROUND
     // -------------------------------------------------
     pub fn propose_fund_round(env: Env, group_id: u64, total_amount: i128, user: Address) -> u64 {
         user.require_auth();                            // Auth user
@@ -275,14 +264,16 @@ impl TreasuryContract {
             panic!("INVALID_AMOUNT");
         }
 
-        // obtener cantidad de miembros
-        let mut member_count: u32 = 0;
+        // Get member count for the group.
+        let member_count: u32;
 
         #[cfg(test)] {
-             member_count = 4;
+            // In tests, this is hardcoded to simplify testing.
+            member_count = 4;
         }
+
         #[cfg(not(test))] {
-            let group_contract = Address::from_string(&String::from_str(&env, GROUP_CONTRACT));
+            let group_contract = Address::from_str(&env, config::GROUP_CONTRACT);
             let client = GroupContract::new(&env, &group_contract);
 
             let members = client.get_members(&group_id);
@@ -340,8 +331,8 @@ impl TreasuryContract {
     pub fn contribute_to_fund_round(
         env: Env,
         round_id: u64,
-        user: Address,
         amount: i128,
+        user: Address,
     ) {
         user.require_auth();                                    // Auth user
 
@@ -360,20 +351,23 @@ impl TreasuryContract {
             panic!("ROUND_ALREADY_COMPLETED");
         }
 
-        let usdc_address = Address::from_str(&env, USDC_ADDRESS);
-        let token = TokenClient::new(&env, &usdc_address);
+        // Only execute token transfer in non-test environment.
+        #[cfg(not(test))] {
+            let usdc_address = Address::from_str(&env, config::USDC_ADDRESS);
+            let token = TokenClient::new(&env, &usdc_address);
 
-        if token.balance(&user) < amount {
-            panic!("insufficient balance");
+            if token.balance(&user) < amount {
+                panic!("insufficient balance");
+            }
+
+            token.transfer(
+                &user,
+                &env.current_contract_address(),
+                &amount,
+            );
         }
 
-        token.transfer(
-            &user,
-            &env.current_contract_address(),
-            &amount,
-        );
-
-        // Obtener aporte previo del usuario
+        // Get previous contribution of user to this round
         let contribution_key = DataKey::FundContribution(round_id, user.clone());
 
         let previous: i128 = env.storage()
@@ -381,33 +375,34 @@ impl TreasuryContract {
             .get(&contribution_key)
             .unwrap_or(0);
 
+        // Add new contribution to previous
         let new_total_user = previous + amount;
 
-        // Guardar aporte actualizado
+        // Save
         env.storage()
             .persistent()
             .set(&contribution_key, &new_total_user);
 
-        // Actualizar total del round
+        // Update total funded amount for the round
         round.funded_amount += amount;
 
-        // Verificar si se completa
+        // Check if round is completed
         if round.funded_amount >= round.total_amount {
             round.completed = true;
         }
 
+        // Update round details
         env.storage()
             .persistent()
             .set(&DataKey::FundRound(round_id), &round);
     }
 
 
+    /// -------------------------------------------------
+    /// GETTERS
+    /// -------------------------------------------------
 
-    // -------------------------------------------------
-    // GETTERS
-    // -------------------------------------------------
-
-    // Get fund rounds of group
+    /// Get fund rounds of group
     pub fn get_group_rounds(env: Env, group_id: u64) -> Vec<u64> {
         env.storage()
             .persistent()
@@ -415,7 +410,7 @@ impl TreasuryContract {
             .unwrap_or(Vec::new(&env))
     }
 
-    // Get specific fund round details
+    /// Get specific fund round details
     pub fn get_fund_round(env: Env, round_id: u64) -> FundRound {
         env.storage()
             .persistent()
@@ -423,7 +418,7 @@ impl TreasuryContract {
             .expect("ROUND_NOT_FOUND")
     }
 
-    // Get user's contribution to a fund round
+    /// Get user's contribution to a fund round
     pub fn get_user_contribution(
         env: Env,
         round_id: u64,
@@ -435,7 +430,7 @@ impl TreasuryContract {
             .unwrap_or(0)
     }
 
-    // Get release proposal details by Group ID
+    /// Get release proposal details by Group ID
     pub fn get_release_proposals_of_group(env: Env, group_id: u64) -> Vec<u64> {
         env.storage()
             .persistent()
@@ -443,11 +438,16 @@ impl TreasuryContract {
             .unwrap_or(Vec::new(&env))
     }
 
-    // Get specific release proposal details
+    /// Get specific release proposal details
     pub fn get_release_proposal(env: Env, proposal_id: u64) -> ReleaseProposal {
         env.storage()
             .persistent()
             .get(&DataKey::ReleaseProposal(proposal_id))
             .expect("PROPOSAL_NOT_FOUND")
+    }
+
+    /// CHECK IF TREASURY EXISTS FOR GROUP ID
+    pub fn check_treasury_id(env: Env, group_id: u64) -> bool {
+        env.storage().persistent().get(&DataKey::GroupId(group_id)).unwrap_or(false)
     }
 }

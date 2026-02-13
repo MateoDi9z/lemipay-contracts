@@ -115,7 +115,29 @@ mod test {
 
         let round_id = client.propose_fund_round(&group_id, &1000, &user);
 
-        client.contribute_to_fund_round(&round_id, &user, &0);
+        client.contribute_to_fund_round(&round_id, &0, &user);
+    }
+
+    #[test]
+    fn test_contribute_to_fund_round() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+
+        let user = Address::generate(&env);
+        let group_id = 1;
+
+        let round_id = client.propose_fund_round(&group_id, &1000, &user);
+
+        client.contribute_to_fund_round(&round_id, &250, &user);
+
+        let round = client.get_fund_round(&round_id);
+        assert_eq!(round.funded_amount, 250);
+
+        let user_contrib = client.get_user_contribution(&round_id, &user);
+        assert_eq!(user_contrib, 250);
     }
 
     #[test]
@@ -200,7 +222,7 @@ mod test {
 
         // destination == user
         let proposal_id = client.propose_release(
-            &user,      // 👈 mismo address
+            &user,
             &1000,
             &group_id,
             &user,
