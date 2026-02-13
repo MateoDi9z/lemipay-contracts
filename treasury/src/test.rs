@@ -90,6 +90,7 @@ mod test {
         let user = Address::generate(&env);
         let group_id = 1;
 
+        client.create_treasury(&group_id, &user);
         let round_id = client.propose_fund_round(&group_id, &1000, &user);
 
         assert_eq!(round_id, 1);
@@ -113,6 +114,7 @@ mod test {
         let user = Address::generate(&env);
         let group_id = 1;
 
+        client.create_treasury(&group_id, &user);
         let round_id = client.propose_fund_round(&group_id, &1000, &user);
 
         client.contribute_to_fund_round(&round_id, &0, &user);
@@ -129,6 +131,7 @@ mod test {
         let user = Address::generate(&env);
         let group_id = 1;
 
+        client.create_treasury(&group_id, &user);
         let round_id = client.propose_fund_round(&group_id, &1000, &user);
 
         client.contribute_to_fund_round(&round_id, &250, &user);
@@ -152,6 +155,7 @@ mod test {
         let group_id: u64 = 1;
         let user = Address::generate(&env);
 
+        client.create_treasury(&group_id, &user);
         client.propose_fund_round(&group_id, &-1000, &user);
     }
 
@@ -169,6 +173,7 @@ mod test {
         let destination = Address::generate(&env);
         let group_id = 1;
 
+        client.create_treasury(&group_id, &user);
         let proposal_id = client.propose_release(
             &destination,
             &1000,
@@ -198,6 +203,7 @@ mod test {
         let dest = Address::generate(&env);
         let group_id = 1;
 
+        client.create_treasury(&group_id, &user);
         let proposal_id = client.propose_release(&dest, &1000, &group_id, &user);
 
         client.approve_release(&proposal_id, &user);
@@ -219,6 +225,8 @@ mod test {
 
         let user = Address::generate(&env);
         let group_id = 1;
+
+        client.create_treasury(&group_id, &user);
 
         // destination == user
         let proposal_id = client.propose_release(
@@ -244,6 +252,7 @@ mod test {
         let dest = Address::generate(&env);
         let group_id = 1;
 
+        client.create_treasury(&group_id, &user);
         let proposal_id = client.propose_release(&dest, &1000, &group_id, &user);
 
         client.approve_release(&proposal_id, &user);
@@ -268,6 +277,7 @@ mod test {
         let dest = Address::generate(&env);
         let group_id = 1;
 
+        client.create_treasury(&group_id, &user1);
         let proposal_id = client.propose_release(&dest, &1000, &group_id, &user1);
 
         // no approve
