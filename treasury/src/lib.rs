@@ -351,6 +351,17 @@ impl TreasuryContract {
             panic!("ROUND_ALREADY_COMPLETED");
         }
 
+        // Calculate remaining
+        let remaining = round
+            .total_amount
+            .checked_sub(round.funded_amount)
+            .expect("Invalid state: funded exceeds total");
+        
+        // Block overshoot contributions.
+        if amount > remaining {
+            panic!("Contribution exceeds remaining target");
+        }
+
         // Only execute token transfer in non-test environment.
         #[cfg(not(test))] {
             let usdc_address = Address::from_str(&env, config::USDC_ADDRESS);
