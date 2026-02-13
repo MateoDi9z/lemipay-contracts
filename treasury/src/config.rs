@@ -4,7 +4,7 @@ pub const GROUP_CONTRACT: &str =
 
 #[cfg(test)]
 pub const USDC_ADDRESS: &str =
-    "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
+    "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75";
 
 #[cfg(all(not(test), feature = "testnet"))]
 pub const GROUP_CONTRACT: &str =
