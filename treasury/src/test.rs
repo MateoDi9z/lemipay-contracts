@@ -115,7 +115,7 @@ mod test {
 
         let round_id = client.propose_fund_round(&group_id, &1000, &user);
 
-        client.contribute_to_fund_round(&round_id, &group_id, &user, &0);
+        client.contribute_to_fund_round(&round_id, &user, &0);
     }
 
     #[test]

@@ -35,6 +35,7 @@ pub struct ReleaseProposal {
 #[derive(Clone)]
 #[contracttype]
 pub struct FundRound {
+    pub group_id: u64,
     pub total_amount: i128,
     pub amount_of_members: u32,
     pub funded_amount: i128,
@@ -301,6 +302,7 @@ impl TreasuryContract {
         let round_id = fund_count;
 
         let new_round = FundRound {
+            group_id,
             total_amount,
             amount_of_members: member_count,
             funded_amount: 0i128,
@@ -338,12 +340,10 @@ impl TreasuryContract {
     pub fn contribute_to_fund_round(
         env: Env,
         round_id: u64,
-        group_id: u64,
         user: Address,
         amount: i128,
     ) {
         user.require_auth();                                    // Auth user
-        Self::check_membership(&env, group_id, user.clone());   // Check membership
 
         if amount <= 0 {
             panic!("INVALID_AMOUNT");
@@ -353,6 +353,8 @@ impl TreasuryContract {
             .persistent()
             .get(&DataKey::FundRound(round_id))
             .expect("ROUND_NOT_FOUND");
+
+        Self::check_membership(&env, round.group_id, user.clone());   // Check membership
 
         if round.completed {
             panic!("ROUND_ALREADY_COMPLETED");

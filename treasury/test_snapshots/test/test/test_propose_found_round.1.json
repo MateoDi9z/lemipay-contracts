@@ -152,6 +152,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "group_id"
+                    },
+                    "val": {
+                      "u64": "2"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "total_amount"
                     },
                     "val": {
