@@ -383,13 +383,10 @@ impl TreasuryContract {
             let usdc_address = Address::from_str(&env, config::USDC_ADDRESS);
             let token = TokenClient::new(&env, &usdc_address);
 
-            if token.balance(&user) < amount {
-                panic!("insufficient balance");
-            }
-
-            token.transfer(
-                &user,
-                &env.current_contract_address(),
+            token.transfer_from(
+                &env.current_contract_address(), // spender
+                &user,                           // from
+                &env.current_contract_address(),  // to
                 &amount,
             );
         }
