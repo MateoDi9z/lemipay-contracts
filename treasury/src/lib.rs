@@ -48,6 +48,7 @@ pub struct FundRound {
 enum DataKey {
     TreasuryId,
     GroupId(u64),
+    GroupBalance(u64),
 
     // Release proposal related keys
     ReleaseProposalCount,           // id generator
@@ -117,6 +118,7 @@ impl TreasuryContract {
         }
 
         env.storage().persistent().set(&DataKey::GroupId(group_id), &true);
+        env.storage().persistent().set(&DataKey::GroupBalance(group_id), &0i128);
     }
 
 
@@ -252,6 +254,20 @@ impl TreasuryContract {
             if current_balance < release.amount {
                 panic!("INSUFFICIENT_TREASURY_BALANCE");
             }
+
+            let mut group_balance: i128 = env.storage()
+                .persistent()
+                .get(&DataKey::GroupBalance(release.group_id))
+                .expect("GROUP_BALANCE_NOT_FOUND");
+
+            if group_balance < release.amount {
+                panic!("INSUFFICIENT_GROUP_BALANCE");
+            }
+
+            group_balance = group_balance.checked_sub(release.amount).expect("BALANCE_UNDERFLOW");
+            env.storage()
+                .persistent()
+                .set(&DataKey::GroupBalance(release.group_id), &group_balance);
 
             token.transfer(
                 &treasury_address,
@@ -389,6 +405,14 @@ impl TreasuryContract {
                 &env.current_contract_address(),  // to
                 &amount,
             );
+
+            let group_id = round.group_id;
+            let current: i128 = env.storage()
+                .persistent()
+                .get(&DataKey::GroupBalance(group_id))
+                .unwrap_or(0);
+            let new_balance = current.checked_add(amount).expect("BALANCE_OVERFLOW");
+            env.storage().persistent().set(&DataKey::GroupBalance(group_id), &new_balance);
         }
 
         // Get previous contribution of user to this round
@@ -475,5 +499,18 @@ impl TreasuryContract {
     /// CHECK IF TREASURY EXISTS FOR GROUP ID
     pub fn check_treasury_id(env: Env, group_id: u64) -> bool {
         env.storage().persistent().get(&DataKey::GroupId(group_id)).unwrap_or(false)
+    }
+
+    /// Get internal USDC balance for a group (logical accounting).
+    pub fn get_group_balance(env: Env, group_id: u64) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::GroupBalance(group_id))
+            .unwrap_or(0)
+    }
+
+    /// Check if group has at least `amount` in its internal balance.
+    pub fn has_sufficient_group_balance(env: Env, group_id: u64, amount: i128) -> bool {
+        Self::get_group_balance(env, group_id) >= amount
     }
 }
