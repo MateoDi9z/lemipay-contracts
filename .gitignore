@@ -4,3 +4,6 @@ target
 .idea
 *.log
 *.wasm
+
+// test_snapshot
+**/test_snapshots/
