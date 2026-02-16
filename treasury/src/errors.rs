@@ -29,4 +29,5 @@ pub enum Error {
     BalanceOverflow = 19,
     ContributionOverflow = 20,
     TooManyMembers = 21,
+    NoContributionToWithdraw = 22,
 }

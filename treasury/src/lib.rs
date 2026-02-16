@@ -15,8 +15,8 @@ pub use crate::types::{FundRound, ReleaseProposal};
 
 #[cfg(not(test))]
 use crate::clients::GroupContract;
-use crate::events::{Contribution, FundRoundCompleted, FundRoundProposed, ReleaseApproved,
-    ReleaseExecuted, ReleaseProposed, TreasuryCreated};
+use crate::events::{Contribution, ContributionWithdrawn, FundRoundCompleted, FundRoundProposed,
+    ReleaseApproved, ReleaseExecuted, ReleaseProposed, TreasuryCreated};
 use crate::storage::DataKey;
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
@@ -423,6 +423,87 @@ impl TreasuryContract {
             }
             .publish(&env);
         }
+
+        Ok(())
+    }
+
+    /// Withdraws the caller's contribution from an **incomplete** fund round.
+    /// Refunds USDC to the user and decreases the round's funded amount and the group balance.
+    /// Only the contributor can withdraw their own funds; round must not be completed.
+    pub fn withdraw_contribution(
+        env: Env,
+        round_id: u64,
+        user: Address,
+    ) -> Result<(), Error> {
+        user.require_auth();
+
+        let mut round: FundRound = env
+            .storage()
+            .persistent()
+            .get(&DataKey::FundRound(round_id))
+            .ok_or(Error::RoundNotFound)?;
+
+        if round.completed {
+            return Err(Error::RoundAlreadyCompleted);
+        }
+
+        helpers::assert_treasury_exists(&env, round.group_id)?;
+        helpers::check_membership(&env, round.group_id, user.clone())?;
+
+        let contribution_key = DataKey::FundContribution(round_id, user.clone());
+        let amount: i128 = env
+            .storage()
+            .persistent()
+            .get(&contribution_key)
+            .unwrap_or(0);
+
+        if amount <= 0 {
+            return Err(Error::NoContributionToWithdraw);
+        }
+
+        let group_id = round.group_id;
+
+        round.funded_amount = round
+            .funded_amount
+            .checked_sub(amount)
+            .ok_or(Error::BalanceUnderflow)?;
+
+        let current_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::GroupBalance(group_id))
+            .ok_or(Error::GroupBalanceNotFound)?;
+        let new_balance = current_balance
+            .checked_sub(amount)
+            .ok_or(Error::BalanceUnderflow)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::GroupBalance(group_id), &new_balance);
+
+        env.storage().persistent().set(&contribution_key, &0i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::FundRound(round_id), &round);
+
+        #[cfg(not(test))]
+        {
+            let usdc_address = Address::from_str(&env, config::USDC_ADDRESS);
+            let token = TokenClient::new(&env, &usdc_address);
+            let treasury_address = env.current_contract_address();
+            if token.balance(&treasury_address) < amount {
+                return Err(Error::InsufficientTreasuryBalance);
+            }
+            token.transfer(&treasury_address, &user, &amount);
+        }
+
+        ContributionWithdrawn {
+            round_id,
+            group_id,
+            user,
+            amount,
+            new_funded_amount: round.funded_amount,
+        }
+        .publish(&env);
 
         Ok(())
     }
