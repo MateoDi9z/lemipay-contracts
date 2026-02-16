@@ -14,5 +14,6 @@ soroban-sdk = "25.1.0"
 soroban-sdk = { version = "25.1.0", features = ["testutils"] }
 
 [features]
+default = ["testnet"]
 testnet = []
 mainnet = []
