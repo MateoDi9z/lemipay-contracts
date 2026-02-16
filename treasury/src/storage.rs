@@ -5,7 +5,6 @@ use soroban_sdk::{contracttype, Address};
 #[derive(Clone)]
 #[contracttype]
 pub(crate) enum DataKey {
-    TreasuryId,
     GroupId(u64),
     GroupBalance(u64),
 

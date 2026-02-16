@@ -26,34 +26,40 @@ The system is composed of two main contracts:
 
 ### 🟡 TreasuryContract
 Responsible for:
-- Holding funds
-- Managing deposits
-- Executing treasury actions
-- Enforcing rules
+- Holding funds (USDC) with **per-group balance tracking**
+- Fund rounds (propose, contribute, complete)
+- Release proposals (propose, approve, execute) with configurable approval rules
+- Enforcing group membership via GroupContract
 
 ### 🔵 GroupContract
 Responsible for:
-- Creating and managing groups
-- Linking groups to a treasury
-- Tracking group state
+- Creating and managing groups (members, approvals required)
+- Providing membership and approval-rule data to the Treasury
 
 ---
 
 ## 📂 Project Structure
 
 ```
-lemipay-contracts/
-│
-├── Cargo.toml (workspace)
+lemipay/
+├── Cargo.toml              (workspace)
 ├── treasury/
 │   ├── Cargo.toml
-│   └── src/lib.rs
+│   └── src/
+│       ├── lib.rs          (contract entrypoint)
+│       ├── config.rs      (testnet/mainnet addresses)
+│       ├── errors.rs       (custom Error enum)
+│       ├── helpers.rs      (membership, treasury checks)
+│       ├── storage.rs      (DataKey)
+│       ├── types.rs        (ReleaseProposal, FundRound)
+│       ├── clients/        (Group contract client)
+│       └── tests/          (*_test.rs modules)
 └── group/
     ├── Cargo.toml
     └── src/lib.rs
 ```
 
-This repository uses a Cargo workspace to manage multiple contracts cleanly.
+The workspace manages both contracts. Treasury tests live under `treasury/src/tests/`.
 
 ---
 
@@ -70,18 +76,26 @@ Install wasm target:
 rustup target add wasm32-unknown-unknown
 ```
 
-Build Contracts
+Build contracts (from repo root):
 
-From the root directory:
 ```bash
-cargo build --target wasm32-unknown-unknown -p treasury --release
-cargo build --target wasm32-unknown-unknown -p group --release
+cargo build --target wasm32-unknown-unknown -p treasury_contract --release
+cargo build --target wasm32-unknown-unknown -p group_contract --release
 ```
 
-Compiled WASM files will be located in:
+Run tests:
+
+```bash
+cargo test -p treasury_contract
+cargo test -p group_contract
+```
+
+Compiled WASM files:
 
 ```
 target/wasm32-unknown-unknown/release/
+  treasury_contract.wasm
+  group_contract.wasm
 ```
 
 ## 🚀 Deploy to Stellar Testnet
@@ -90,24 +104,21 @@ Example (replace paths and keys accordingly):
 
 ```bash
 soroban contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/treasury.wasm \
+  --wasm target/wasm32-unknown-unknown/release/treasury_contract.wasm \
   --source <YOUR_SECRET_KEY> \
   --network testnet
 ```
-Repeat for group.wasm.
 
-Save deployed contract IDs for frontend interaction.
+Repeat for `group_contract.wasm`. Save deployed contract IDs for frontend and configure Treasury’s `config` (e.g. testnet feature) with the Group contract ID.
 
 ## 🔁 Example Flow (MVP Demo)
 
-1. Deploy TreasuryContract
-2. Deploy GroupContract
-3. Create a group
-4. Deposit funds into treasury
-5. Execute treasury action 
-6. Verify on-chain state 
-
-This flow is used in the live demo presentation.
+1. Deploy GroupContract, then TreasuryContract (Treasury needs Group’s contract ID in config).
+2. Create a group (GroupContract).
+3. Create a treasury for that group (TreasuryContract).
+4. Propose a fund round, contribute USDC (per-group balance increases).
+5. Propose a release, gather approvals, execute release (per-group balance decreases).
+6. Verify on-chain state (e.g. `get_group_balance`, proposals).
 
 ## 🎯 MVP Scope
 

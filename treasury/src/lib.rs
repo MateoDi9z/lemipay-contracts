@@ -5,7 +5,8 @@ mod clients;
 mod errors;
 mod helpers;
 mod storage;
-mod test;
+#[cfg(test)]
+mod tests;
 mod types;
 
 pub use crate::errors::Error;
@@ -161,31 +162,22 @@ impl TreasuryContract {
             return Err(Error::NotEnoughApprovals);
         }
 
-        #[cfg(test)]
-        {
-            let group_balance: i128 = env
-                .storage()
-                .persistent()
-                .get(&DataKey::GroupBalance(release.group_id))
-                .ok_or(Error::GroupBalanceNotFound)?;
+        let group_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::GroupBalance(release.group_id))
+            .ok_or(Error::GroupBalanceNotFound)?;
 
-            if group_balance < release.amount {
-                return Err(Error::InsufficientGroupBalance);
-            }
-
-            let new_balance = group_balance
-                .checked_sub(release.amount)
-                .ok_or(Error::BalanceUnderflow)?;
-            env.storage()
-                .persistent()
-                .set(&DataKey::GroupBalance(release.group_id), &new_balance);
-
-            release.executed = true;
-            env.storage()
-                .persistent()
-                .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
-            return Ok(());
+        if group_balance < release.amount {
+            return Err(Error::InsufficientGroupBalance);
         }
+
+        let new_balance = group_balance
+            .checked_sub(release.amount)
+            .ok_or(Error::BalanceUnderflow)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::GroupBalance(release.group_id), &new_balance);
 
         #[cfg(not(test))]
         {
@@ -194,42 +186,22 @@ impl TreasuryContract {
 
             let treasury_address = env.current_contract_address();
 
-            let current_balance = token.balance(&treasury_address);
-
-            if current_balance < release.amount {
+            if token.balance(&treasury_address) < release.amount {
                 return Err(Error::InsufficientTreasuryBalance);
             }
-
-            let mut group_balance: i128 = env
-                .storage()
-                .persistent()
-                .get(&DataKey::GroupBalance(release.group_id))
-                .ok_or(Error::GroupBalanceNotFound)?;
-
-            if group_balance < release.amount {
-                return Err(Error::InsufficientGroupBalance);
-            }
-
-            group_balance = group_balance
-                .checked_sub(release.amount)
-                .ok_or(Error::BalanceUnderflow)?;
-            env.storage()
-                .persistent()
-                .set(&DataKey::GroupBalance(release.group_id), &group_balance);
 
             token.transfer(
                 &treasury_address,
                 &release.destination,
                 &release.amount,
             );
-
-            release.executed = true;
-
-            env.storage()
-                .persistent()
-                .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
         }
-        #[cfg(not(test))]
+
+        release.executed = true;
+        env.storage()
+            .persistent()
+            .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+
         Ok(())
     }
 
@@ -352,32 +324,18 @@ impl TreasuryContract {
                 &env.current_contract_address(),
                 &amount,
             );
-
-            let group_id = round.group_id;
-            let current: i128 = env
-                .storage()
-                .persistent()
-                .get(&DataKey::GroupBalance(group_id))
-                .unwrap_or(0);
-            let new_balance = current.checked_add(amount).ok_or(Error::BalanceOverflow)?;
-            env.storage()
-                .persistent()
-                .set(&DataKey::GroupBalance(group_id), &new_balance);
         }
 
-        #[cfg(test)]
-        {
-            let group_id = round.group_id;
-            let current: i128 = env
-                .storage()
-                .persistent()
-                .get(&DataKey::GroupBalance(group_id))
-                .unwrap_or(0);
-            let new_balance = current.checked_add(amount).ok_or(Error::BalanceOverflow)?;
-            env.storage()
-                .persistent()
-                .set(&DataKey::GroupBalance(group_id), &new_balance);
-        }
+        let group_id = round.group_id;
+        let current: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::GroupBalance(group_id))
+            .unwrap_or(0);
+        let new_balance = current.checked_add(amount).ok_or(Error::BalanceOverflow)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::GroupBalance(group_id), &new_balance);
 
         let contribution_key = DataKey::FundContribution(round_id, user.clone());
 

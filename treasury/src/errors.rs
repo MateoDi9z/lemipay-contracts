@@ -1,4 +1,6 @@
 //! Custom errors for the Treasury contract.
+//!
+//! Used with `Result<T, Error>` in public functions; contract clients get `try_*` variants.
 
 use soroban_sdk::contracterror;
 
