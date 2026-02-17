@@ -1,3 +1,22 @@
+//! # Treasury contract
+//!
+//! Group-based treasury: fund rounds, release proposals, per-group balance.
+//!
+//! ## ⚠️ USDC inflow — único flujo soportado
+//!
+//! **El único flujo de entrada de USDC al contrato es [`contribute_to_fund_round`].**
+//!
+//! - No se debe hacer **transfer directo** de USDC al contrato (desde billetera o otro contrato).
+//! - En Soroban, una transferencia directa la ejecuta solo el contrato del token; este contrato
+//!   **no se invoca** en ese caso, por lo que no es posible rechazar ni hacer panic ante un depósito
+//!   directo desde el código del Treasury.
+//! - Cualquier USDC enviado por transfer directo **no** se refleja en ningún `GroupBalance`, no se
+//!   asigna a ningún grupo y con la lógica actual **no hay forma de asignarlo después**. Ese saldo
+//!   queda en el contrato sin uso (execute_release sigue comprobando balance del token y del grupo,
+//!   así que no se puede “robar”, pero el saldo directo queda inutilizable).
+//!
+//! Integradores y frontends deben asegurar que el único depósito sea vía `contribute_to_fund_round`.
+
 #![no_std]
 
 mod config;
@@ -392,6 +411,9 @@ impl TreasuryContract {
         Ok(round_id)
     }
 
+    /// Deposits USDC into the treasury and credits the group's balance for the given fund round.
+    /// This is the **only supported way** to send USDC to the contract; direct transfers are not
+    /// reflected in any GroupBalance and cannot be recovered. See crate-level documentation.
     pub fn contribute_to_fund_round(
         env: Env,
         round_id: u64,
