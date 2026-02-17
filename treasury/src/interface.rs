@@ -24,7 +24,7 @@ pub trait ITreasuryContract {
     /// Proposes a release of USDC from the group's balance to a destination address.
     ///
     /// The proposal must later be approved by enough group members (see GroupContract approval
-    /// rule) and then executed via [`execute_release`](Self::execute_release). The group's balance must be at least
+    /// rule) and then executed via [`execute_release`](ITreasuryContract::execute_release). The group's balance must be at least
     /// `amount` at proposal time to avoid creating unexecutable proposals.
     ///
     /// # Arguments
@@ -34,7 +34,7 @@ pub trait ITreasuryContract {
     /// * `user` - Proposer; must be authorized and a member of the group.
     ///
     /// # Returns
-    /// The new release proposal id (opaque u64 for use with [`approve_release`](Self::approve_release), [`execute_release`](Self::execute_release), [`cancel_release_proposal`](Self::cancel_release_proposal)).
+    /// The new release proposal id (opaque u64 for use with [`approve_release`](ITreasuryContract::approve_release), [`execute_release`](ITreasuryContract::execute_release), [`cancel_release_proposal`](ITreasuryContract::cancel_release_proposal)).
     ///
     /// # Errors
     /// * [`Error::NotMember`] - `user` or `destination` not in group.
@@ -55,7 +55,7 @@ pub trait ITreasuryContract {
     /// group's approval rule (from GroupContract), the proposal can be executed.
     ///
     /// # Arguments
-    /// * `release_proposal_id` - Id returned by [`propose_release`](Self::propose_release).
+    /// * `release_proposal_id` - Id returned by [`propose_release`](ITreasuryContract::propose_release).
     /// * `user` - Approver; must be authorized and a member of the proposal's group (and not the destination).
     ///
     /// # Errors
@@ -90,8 +90,8 @@ pub trait ITreasuryContract {
 
     /// Cancels a release proposal that has not been executed.
     ///
-    /// Any member of the proposal's group can cancel it. After cancellation, [`approve_release`](Self::approve_release)
-    /// and [`execute_release`](Self::execute_release) will return [`Error::ProposalCanceled`] for this proposal.
+    /// Any member of the proposal's group can cancel it. After cancellation, [`approve_release`](ITreasuryContract::approve_release)
+    /// and [`execute_release`](ITreasuryContract::execute_release) will return [`Error::ProposalCanceled`] for this proposal.
     ///
     /// # Arguments
     /// * `release_proposal_id` - Id of the proposal to cancel.
@@ -110,8 +110,8 @@ pub trait ITreasuryContract {
 
     /// Proposes a new fund round for a group: a target amount members can contribute to.
     ///
-    /// The round is identified by the returned `round_id`. Members then use [`contribute_to_fund_round`](Self::contribute_to_fund_round)
-    /// until the round is fully funded or they withdraw via [`withdraw_contribution`](Self::withdraw_contribution).
+    /// The round is identified by the returned `round_id`. Members then use [`contribute_to_fund_round`](ITreasuryContract::contribute_to_fund_round)
+    /// until the round is fully funded or they withdraw via [`withdraw_contribution`](ITreasuryContract::withdraw_contribution).
     ///
     /// # Arguments
     /// * `group_id` - Group that owns the treasury and the round.
@@ -119,7 +119,7 @@ pub trait ITreasuryContract {
     /// * `user` - Proposer; must be authorized and a member of the group.
     ///
     /// # Returns
-    /// The new fund round id (for [`contribute_to_fund_round`](Self::contribute_to_fund_round), [`withdraw_contribution`](Self::withdraw_contribution), [`get_fund_round`](Self::get_fund_round)).
+    /// The new fund round id (for [`contribute_to_fund_round`](ITreasuryContract::contribute_to_fund_round), [`withdraw_contribution`](ITreasuryContract::withdraw_contribution), [`get_fund_round`](ITreasuryContract::get_fund_round)).
     ///
     /// # Errors
     /// * [`Error::NotMember`] - `user` not in group.
@@ -144,7 +144,7 @@ pub trait ITreasuryContract {
     /// `total_amount`, the round is marked completed.
     ///
     /// # Arguments
-    /// * `round_id` - Id of the fund round (from [`propose_fund_round`](Self::propose_fund_round)).
+    /// * `round_id` - Id of the fund round (from [`propose_fund_round`](ITreasuryContract::propose_fund_round)).
     /// * `amount` - Amount to contribute (must be positive and ≤ remaining to reach round target).
     /// * `user` - Contributor; must be authorized and a member of the round's group.
     ///
