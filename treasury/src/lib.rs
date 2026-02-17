@@ -3,6 +3,7 @@
 mod config;
 mod clients;
 mod errors;
+mod events;
 mod helpers;
 mod storage;
 #[cfg(test)]
@@ -14,6 +15,8 @@ pub use crate::types::{FundRound, ReleaseProposal};
 
 #[cfg(not(test))]
 use crate::clients::GroupContract;
+use crate::events::{Contribution, FundRoundCompleted, FundRoundProposed, ReleaseApproved,
+    ReleaseExecuted, ReleaseProposed, TreasuryCreated};
 use crate::storage::DataKey;
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
@@ -41,6 +44,13 @@ impl TreasuryContract {
         env.storage()
             .persistent()
             .set(&DataKey::GroupBalance(group_id), &0i128);
+
+        TreasuryCreated {
+            group_id,
+            creator: user,
+        }
+        .publish(&env);
+
         Ok(())
     }
 
@@ -70,7 +80,7 @@ impl TreasuryContract {
 
         let proposal = ReleaseProposal {
             group_id,
-            destination,
+            destination: destination.clone(),
             amount,
             approvals: 0,
             executed: false,
@@ -94,6 +104,15 @@ impl TreasuryContract {
         env.storage()
             .persistent()
             .set(&DataKey::ReleaseProposalCount, &count);
+
+        ReleaseProposed {
+            proposal_id: count,
+            group_id,
+            destination,
+            amount,
+            proposer: user,
+        }
+        .publish(&env);
 
         Ok(count)
     }
@@ -134,6 +153,14 @@ impl TreasuryContract {
         env.storage()
             .persistent()
             .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+
+        ReleaseApproved {
+            proposal_id: release_proposal_id,
+            group_id: release.group_id,
+            approver: user,
+        }
+        .publish(&env);
+
         Ok(())
     }
 
@@ -202,6 +229,14 @@ impl TreasuryContract {
             .persistent()
             .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
 
+        ReleaseExecuted {
+            proposal_id: release_proposal_id,
+            group_id: release.group_id,
+            destination: release.destination,
+            amount: release.amount,
+        }
+        .publish(&env);
+
         Ok(())
     }
 
@@ -212,7 +247,7 @@ impl TreasuryContract {
         user: Address,
     ) -> Result<u64, Error> {
         user.require_auth();
-        helpers::check_membership(&env, group_id, user)?;
+        helpers::check_membership(&env, group_id, user.clone())?;
         helpers::assert_treasury_exists(&env, group_id)?;
 
         if total_amount <= 0 {
@@ -275,6 +310,14 @@ impl TreasuryContract {
         env.storage()
             .persistent()
             .set(&DataKey::FundRoundCount, &fund_count);
+
+        FundRoundProposed {
+            round_id,
+            group_id,
+            total_amount,
+            proposer: user,
+        }
+        .publish(&env);
 
         Ok(round_id)
     }
@@ -362,6 +405,25 @@ impl TreasuryContract {
         env.storage()
             .persistent()
             .set(&DataKey::FundRound(round_id), &round);
+
+        Contribution {
+            round_id,
+            group_id,
+            user: user.clone(),
+            amount,
+            new_funded_amount: round.funded_amount,
+        }
+        .publish(&env);
+
+        if round.completed {
+            FundRoundCompleted {
+                round_id,
+                group_id,
+                total_amount: round.total_amount,
+            }
+            .publish(&env);
+        }
+
         Ok(())
     }
 
