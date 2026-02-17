@@ -24,18 +24,21 @@ mod clients;
 mod errors;
 mod events;
 mod helpers;
+mod interface;
 mod storage;
 #[cfg(test)]
 mod tests;
 mod types;
 
 pub use crate::errors::Error;
+pub use crate::interface::ITreasuryContractClient as TreasuryContractClient;
 pub use crate::types::{FundRound, ReleaseProposal};
 
 #[cfg(not(test))]
 use crate::clients::GroupContract;
 use crate::events::{Contribution, ContributionWithdrawn, FundRoundCompleted, FundRoundProposed,
     ReleaseApproved, ReleaseCanceled, ReleaseExecuted, ReleaseProposed, TreasuryCreated};
+use crate::interface::ITreasuryContract;
 use crate::storage::DataKey;
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
@@ -45,9 +48,9 @@ use soroban_sdk::token::Client as TokenClient;
 #[contract]
 pub struct TreasuryContract;
 
-#[contractimpl]
-impl TreasuryContract {
-    pub fn create_treasury(
+#[contractimpl(contracttrait)]
+impl ITreasuryContract for TreasuryContract {
+    fn create_treasury(
         env: Env,
         group_id: u64,
         user: Address,
@@ -73,7 +76,7 @@ impl TreasuryContract {
         Ok(())
     }
 
-    pub fn propose_release(
+    fn propose_release(
         env: Env,
         destination: Address,
         amount: i128,
@@ -145,7 +148,7 @@ impl TreasuryContract {
         Ok(count)
     }
 
-    pub fn approve_release(
+    fn approve_release(
         env: Env,
         release_proposal_id: u64,
         user: Address,
@@ -200,7 +203,7 @@ impl TreasuryContract {
         Ok(())
     }
 
-    pub fn execute_release(env: Env, release_proposal_id: u64) -> Result<(), Error> {
+    fn execute_release(env: Env, release_proposal_id: u64) -> Result<(), Error> {
         let release: ReleaseProposal = env
             .storage()
             .persistent()
@@ -284,9 +287,7 @@ impl TreasuryContract {
         Ok(())
     }
 
-    /// Cancels a release proposal that has not been executed.
-    /// Any member of the proposal's group can cancel (revoke) it.
-    pub fn cancel_release_proposal(
+    fn cancel_release_proposal(
         env: Env,
         release_proposal_id: u64,
         user: Address,
@@ -329,7 +330,7 @@ impl TreasuryContract {
         Ok(())
     }
 
-    pub fn propose_fund_round(
+    fn propose_fund_round(
         env: Env,
         group_id: u64,
         total_amount: i128,
@@ -411,10 +412,7 @@ impl TreasuryContract {
         Ok(round_id)
     }
 
-    /// Deposits USDC into the treasury and credits the group's balance for the given fund round.
-    /// This is the **only supported way** to send USDC to the contract; direct transfers are not
-    /// reflected in any GroupBalance and cannot be recovered. See crate-level documentation.
-    pub fn contribute_to_fund_round(
+    fn contribute_to_fund_round(
         env: Env,
         round_id: u64,
         amount: i128,
@@ -519,10 +517,7 @@ impl TreasuryContract {
         Ok(())
     }
 
-    /// Withdraws the caller's contribution from an **incomplete** fund round.
-    /// Refunds USDC to the user and decreases the round's funded amount and the group balance.
-    /// Only the contributor can withdraw their own funds; round must not be completed.
-    pub fn withdraw_contribution(
+    fn withdraw_contribution(
         env: Env,
         round_id: u64,
         user: Address,
@@ -600,56 +595,56 @@ impl TreasuryContract {
         Ok(())
     }
 
-    pub fn get_group_rounds(env: Env, group_id: u64) -> Vec<u64> {
+    fn get_group_rounds(env: Env, group_id: u64) -> Vec<u64> {
         env.storage()
             .persistent()
             .get(&DataKey::GroupFundRounds(group_id))
             .unwrap_or(Vec::new(&env))
     }
 
-    pub fn get_fund_round(env: Env, round_id: u64) -> Result<FundRound, Error> {
+    fn get_fund_round(env: Env, round_id: u64) -> Result<FundRound, Error> {
         env.storage()
             .persistent()
             .get(&DataKey::FundRound(round_id))
             .ok_or(Error::RoundNotFound)
     }
 
-    pub fn get_user_contribution(env: Env, round_id: u64, user: Address) -> i128 {
+    fn get_user_contribution(env: Env, round_id: u64, user: Address) -> i128 {
         env.storage()
             .persistent()
             .get(&DataKey::FundContribution(round_id, user))
             .unwrap_or(0)
     }
 
-    pub fn get_release_proposals_of_group(env: Env, group_id: u64) -> Vec<u64> {
+    fn get_release_proposals_of_group(env: Env, group_id: u64) -> Vec<u64> {
         env.storage()
             .persistent()
             .get(&DataKey::GroupReleaseProposals(group_id))
             .unwrap_or(Vec::new(&env))
     }
 
-    pub fn get_release_proposal(env: Env, proposal_id: u64) -> Result<ReleaseProposal, Error> {
+    fn get_release_proposal(env: Env, proposal_id: u64) -> Result<ReleaseProposal, Error> {
         env.storage()
             .persistent()
             .get(&DataKey::ReleaseProposal(proposal_id))
             .ok_or(Error::ProposalNotFound)
     }
 
-    pub fn check_treasury_id(env: Env, group_id: u64) -> bool {
+    fn check_treasury_id(env: Env, group_id: u64) -> bool {
         env.storage()
             .persistent()
             .get(&DataKey::GroupId(group_id))
             .unwrap_or(false)
     }
 
-    pub fn get_group_balance(env: Env, group_id: u64) -> i128 {
+    fn get_group_balance(env: Env, group_id: u64) -> i128 {
         env.storage()
             .persistent()
             .get(&DataKey::GroupBalance(group_id))
             .unwrap_or(0)
     }
 
-    pub fn has_sufficient_group_balance(env: Env, group_id: u64, amount: i128) -> bool {
+    fn has_sufficient_group_balance(env: Env, group_id: u64, amount: i128) -> bool {
         Self::get_group_balance(env, group_id) >= amount
     }
 }
