@@ -101,27 +101,35 @@ mod group_balance_test {
         let client = TreasuryContractClient::new(&env, &contract_id);
         let user = Address::generate(&env);
         let dest = Address::generate(&env);
-        let group_id = 1;
+        let group_id = 1u64;
 
         client.create_treasury(&group_id, &user);
         let round_id = client.propose_fund_round(&group_id, &1000, &user);
-        client.contribute_to_fund_round(&round_id, &100, &user);
+        client.contribute_to_fund_round(&round_id, &500, &user);
 
-        assert_eq!(client.get_group_balance(&group_id), 100);
+        assert_eq!(client.get_group_balance(&group_id), 500);
 
-        let proposal_id = client.propose_release(&dest, &300, &group_id, &user);
-        client.approve_release(&proposal_id, &user);
+        // Propose two releases of 300 each (both allowed while balance is 500).
+        let proposal_a = client.propose_release(&dest, &300, &group_id, &user);
+        let proposal_b = client.propose_release(&dest, &300, &group_id, &user);
+        client.approve_release(&proposal_a, &user);
+        client.approve_release(&proposal_b, &user);
 
-        let result = client.try_execute_release(&proposal_id);
+        // Execute first release -> balance becomes 200.
+        client.execute_release(&proposal_a);
+        assert_eq!(client.get_group_balance(&group_id), 200);
+
+        // Second release (300) cannot execute: balance 200 < 300.
+        let result = client.try_execute_release(&proposal_b);
         assert_eq!(
             result,
             Err(Ok(Error::InsufficientGroupBalance)),
-            "execute_release must fail when group balance (100) < release amount (300)"
+            "execute_release must fail when group balance (200) < release amount (300)"
         );
 
         assert_eq!(
             client.get_group_balance(&group_id),
-            100,
+            200,
             "balance must be unchanged after failed release"
         );
     }

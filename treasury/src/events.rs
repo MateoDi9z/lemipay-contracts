@@ -45,6 +45,16 @@ pub struct ReleaseExecuted {
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReleaseCanceled {
+    #[topic]
+    pub proposal_id: u64,
+    #[topic]
+    pub group_id: u64,
+    pub canceled_by: Address,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FundRoundProposed {
     #[topic]
     pub round_id: u64,

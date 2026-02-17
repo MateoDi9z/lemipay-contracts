@@ -30,4 +30,5 @@ pub enum Error {
     ContributionOverflow = 20,
     TooManyMembers = 21,
     NoContributionToWithdraw = 22,
+    ProposalCanceled = 23,
 }

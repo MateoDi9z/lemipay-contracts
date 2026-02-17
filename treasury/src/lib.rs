@@ -16,7 +16,7 @@ pub use crate::types::{FundRound, ReleaseProposal};
 #[cfg(not(test))]
 use crate::clients::GroupContract;
 use crate::events::{Contribution, ContributionWithdrawn, FundRoundCompleted, FundRoundProposed,
-    ReleaseApproved, ReleaseExecuted, ReleaseProposed, TreasuryCreated};
+    ReleaseApproved, ReleaseCanceled, ReleaseExecuted, ReleaseProposed, TreasuryCreated};
 use crate::storage::DataKey;
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
@@ -68,6 +68,15 @@ impl TreasuryContract {
 
         if amount <= 0 {
             return Err(Error::InvalidAmount);
+        }
+
+        let group_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::GroupBalance(group_id))
+            .unwrap_or(0);
+        if group_balance < amount {
+            return Err(Error::InsufficientGroupBalance);
         }
 
         let mut count: u64 = env
@@ -124,7 +133,7 @@ impl TreasuryContract {
     ) -> Result<(), Error> {
         user.require_auth();
 
-        let mut release: ReleaseProposal = env
+        let release: ReleaseProposal = env
             .storage()
             .persistent()
             .get(&DataKey::ReleaseProposal(release_proposal_id))
@@ -132,6 +141,13 @@ impl TreasuryContract {
 
         if release.executed {
             return Err(Error::AlreadyExecuted);
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::ReleaseProposalCanceled(release_proposal_id))
+        {
+            return Err(Error::ProposalCanceled);
         }
 
         if release.destination == user {
@@ -148,11 +164,12 @@ impl TreasuryContract {
 
         env.storage().persistent().set(&approval_key, &true);
 
-        release.approvals += 1;
+        let mut updated = release.clone();
+        updated.approvals += 1;
 
         env.storage()
             .persistent()
-            .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+            .set(&DataKey::ReleaseProposal(release_proposal_id), &updated);
 
         ReleaseApproved {
             proposal_id: release_proposal_id,
@@ -165,7 +182,7 @@ impl TreasuryContract {
     }
 
     pub fn execute_release(env: Env, release_proposal_id: u64) -> Result<(), Error> {
-        let mut release: ReleaseProposal = env
+        let release: ReleaseProposal = env
             .storage()
             .persistent()
             .get(&DataKey::ReleaseProposal(release_proposal_id))
@@ -173,6 +190,13 @@ impl TreasuryContract {
 
         if release.executed {
             return Err(Error::AlreadyExecuted);
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::ReleaseProposalCanceled(release_proposal_id))
+        {
+            return Err(Error::ProposalCanceled);
         }
 
         #[cfg(test)]
@@ -224,16 +248,62 @@ impl TreasuryContract {
             );
         }
 
-        release.executed = true;
+        let mut updated = release.clone();
+        updated.executed = true;
         env.storage()
             .persistent()
-            .set(&DataKey::ReleaseProposal(release_proposal_id), &release);
+            .set(&DataKey::ReleaseProposal(release_proposal_id), &updated);
 
         ReleaseExecuted {
             proposal_id: release_proposal_id,
             group_id: release.group_id,
             destination: release.destination,
             amount: release.amount,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Cancels a release proposal that has not been executed.
+    /// Any member of the proposal's group can cancel (revoke) it.
+    pub fn cancel_release_proposal(
+        env: Env,
+        release_proposal_id: u64,
+        user: Address,
+    ) -> Result<(), Error> {
+        user.require_auth();
+
+        let release: ReleaseProposal = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ReleaseProposal(release_proposal_id))
+            .ok_or(Error::ProposalNotFound)?;
+
+        if release.executed {
+            return Err(Error::AlreadyExecuted);
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::ReleaseProposalCanceled(release_proposal_id))
+        {
+            return Err(Error::ProposalCanceled);
+        }
+
+        helpers::check_membership(&env, release.group_id, user.clone())?;
+
+        env.storage()
+            .persistent()
+            .set(
+                &DataKey::ReleaseProposalCanceled(release_proposal_id),
+                &true,
+            );
+
+        ReleaseCanceled {
+            proposal_id: release_proposal_id,
+            group_id: release.group_id,
+            canceled_by: user,
         }
         .publish(&env);
 
