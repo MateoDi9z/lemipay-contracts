@@ -111,6 +111,16 @@ soroban contract deploy \
 
 Repeat for `group_contract.wasm`. Save deployed contract IDs for frontend and configure Treasury’s `config` (e.g. testnet feature) with the Group contract ID.
 
+## ⚠️ USDC: único flujo de entrada
+
+**El único flujo de entrada de USDC al Treasury es `contribute_to_fund_round`.**
+
+- **No** se debe hacer **transfer directo** de USDC al contrato (desde billetera u otro contrato).
+- En Soroban, una transferencia directa la ejecuta solo el contrato del token; el Treasury **no se invoca**, por lo que **no es posible** hacer panic ni rechazar un depósito directo desde el código del contrato.
+- Cualquier USDC enviado por transfer directo no se refleja en ningún `GroupBalance`, no se asigna a ningún grupo y **no hay forma de asignarlo después**; ese saldo queda en el contrato sin uso (no se puede "robar" porque `execute_release` comprueba tanto balance del token como del grupo, pero el saldo directo queda inutilizable).
+
+Frontends e integradores deben asegurar que el único depósito sea vía `contribute_to_fund_round`.
+
 ## 🔁 Example Flow (MVP Demo)
 
 1. Deploy GroupContract, then TreasuryContract (Treasury needs Group’s contract ID in config).
