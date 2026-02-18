@@ -307,6 +307,14 @@ impl TreasuryContract {
         }
         .publish(&env);
 
+        ReleaseExecuted {
+            proposal_id: release_proposal_id,
+            group_id: release.group_id,
+            destination: release.destination,
+            amount: release.amount,
+        }
+        .publish(&env);
+
         Ok(())
     }
 
