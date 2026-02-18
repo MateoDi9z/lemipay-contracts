@@ -103,4 +103,64 @@ mod fund_round_test {
         let result = client.try_propose_fund_round(&group_id, &-1000, &user);
         assert_eq!(result, Err(Ok(Error::InvalidAmount)));
     }
+
+    #[test]
+    fn test_withdraw_contribution() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+        let user = Address::generate(&env);
+        let group_id = 1u64;
+
+        client.create_treasury(&group_id, &user);
+        let round_id = client.propose_fund_round(&group_id, &1000, &user);
+        client.contribute_to_fund_round(&round_id, &250, &user);
+
+        assert_eq!(client.get_user_contribution(&round_id, &user), 250);
+        assert_eq!(client.get_fund_round(&round_id).funded_amount, 250);
+
+        client.withdraw_contribution(&round_id, &user);
+
+        assert_eq!(client.get_user_contribution(&round_id, &user), 0);
+        let round = client.get_fund_round(&round_id);
+        assert_eq!(round.funded_amount, 0);
+        assert!(!round.completed);
+    }
+
+    #[test]
+    fn test_withdraw_contribution_rejects_when_nothing_to_withdraw() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+        let user = Address::generate(&env);
+        let group_id = 1u64;
+
+        client.create_treasury(&group_id, &user);
+        let round_id = client.propose_fund_round(&group_id, &1000, &user);
+
+        let result = client.try_withdraw_contribution(&round_id, &user);
+        assert_eq!(result, Err(Ok(Error::NoContributionToWithdraw)));
+    }
+
+    #[test]
+    fn test_withdraw_contribution_rejects_when_round_completed() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TreasuryContract, ());
+        let client = TreasuryContractClient::new(&env, &contract_id);
+        let user = Address::generate(&env);
+        let group_id = 1u64;
+
+        client.create_treasury(&group_id, &user);
+        let round_id = client.propose_fund_round(&group_id, &1000, &user);
+        client.contribute_to_fund_round(&round_id, &1000, &user);
+
+        let result = client.try_withdraw_contribution(&round_id, &user);
+        assert_eq!(result, Err(Ok(Error::RoundAlreadyCompleted)));
+    }
 }
