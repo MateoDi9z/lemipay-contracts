@@ -11,6 +11,7 @@ pub(crate) enum DataKey {
     // Release proposal related keys
     ReleaseProposalCount,
     ReleaseProposal(u64),
+    ReleaseProposalCanceled(u64),
     GroupReleaseProposals(u64),
     ReleaseApproval(u64, Address),
 
