@@ -106,7 +106,7 @@ impl ITreasuryContract for TreasuryContract {
         contract::get_group_rounds(env, group_id)
     }
 
-    fn get_fund_round(env: Env, round_id: u64) -> Result<crate::types::FundRound, Error> {
+    fn get_fund_round(env: Env, round_id: u64) -> Result<FundRound, Error> {
         contract::get_fund_round(env, round_id)
     }
 
@@ -121,7 +121,7 @@ impl ITreasuryContract for TreasuryContract {
     fn get_release_proposal(
         env: Env,
         proposal_id: u64,
-    ) -> Result<crate::types::ReleaseProposal, Error> {
+    ) -> Result<ReleaseProposal, Error> {
         contract::get_release_proposal(env, proposal_id)
     }
 
