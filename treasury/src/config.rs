@@ -4,7 +4,7 @@ pub const GROUP_CONTRACT: &str =
 
 #[cfg(test)]
 pub const USDC_ADDRESS: &str =
-    "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75";
+    "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
 
 #[cfg(all(not(test), feature = "testnet"))]
 pub const GROUP_CONTRACT: &str =
@@ -12,15 +12,14 @@ pub const GROUP_CONTRACT: &str =
 
 #[cfg(all(not(test), feature = "testnet"))]
 pub const USDC_ADDRESS: &str =
-    "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75";
+    "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
+
+/// Replace with real mainnet contract IDs before deploying.
+#[cfg(all(not(test), feature = "mainnet"))]
+pub const GROUP_CONTRACT: &str = "CA_MAINNET...";
 
 #[cfg(all(not(test), feature = "mainnet"))]
-pub const GROUP_CONTRACT: &str =
-    "CA_MAINNET...";
-
-#[cfg(all(not(test), feature = "mainnet"))]
-pub const USDC_ADDRESS: &str =
-    "CA_MAINNET...";
+pub const USDC_ADDRESS: &str = "CA_MAINNET...";
 
 #[cfg(not(any(test, feature = "testnet", feature = "mainnet")))]
 compile_error!("You must enable either 'testnet' or 'mainnet' feature");

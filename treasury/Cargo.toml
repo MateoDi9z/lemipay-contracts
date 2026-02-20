@@ -1,6 +1,6 @@
 [package]
 name = "treasury_contract"
-version = "0.1.1"
+version = "0.1.3"
 
 edition = "2024"
 
@@ -14,5 +14,6 @@ soroban-sdk = "25.1.0"
 soroban-sdk = { version = "25.1.0", features = ["testutils"] }
 
 [features]
+default = ["testnet"]
 testnet = []
 mainnet = []
